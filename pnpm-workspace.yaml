@@ -1,0 +1,6 @@
+# esbuild (Vite's bundler/transpiler) ships a native binary and needs its install
+# script to run. pnpm 11 blocks build scripts by default; allow this trusted one.
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - vite@8.1.1
