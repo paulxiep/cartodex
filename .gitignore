@@ -1,0 +1,28 @@
+node_modules
+.pnpm-store
+dist
+dist-ssr
+*.local
+.DS_Store
+
+# Generated dataset snapshots, reproduced by `pnpm build-data` (run before every
+# build, and in CI), so they are build artifacts, not source. Don't commit.
+public/data/
+
+# Vite / TS
+.vite
+*.tsbuildinfo
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Root-level docs are scratch/working notes by default; only README.md is tracked.
+# Canonical docs live in docs/ (not at root, so they stay tracked).
+# Governance files are public and tracked; LICENSING_STRATEGY.md stays internal.
+/*.md
+!/README.md
+!/CONTRIBUTING.md
+!/CLA-individual.md
+!/CLA-corporate.md

@@ -1,0 +1,53 @@
+{
+  "name": "cartodex",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A composable gallery of map projections, cartograms, and route layers.",
+  "license": "AGPL-3.0-only",
+  "author": "Rachapong Chirarattananon <paulxiep@outlook.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paulxiep/cartodex.git"
+  },
+  "packageManager": "pnpm@11.9.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "pnpm build-data && pnpm typecheck && vite build",
+    "build-data": "tsx scripts/build-data.ts",
+    "refresh-data": "tsx scripts/build-data.ts --force",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "d3-array": "^3.2.4",
+    "d3-drag": "^3.0.0",
+    "d3-geo": "^3.1.1",
+    "d3-scale": "^4.0.2",
+    "d3-scale-chromatic": "^3.1.0",
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
+    "topojson-client": "^3.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/d3-array": "^3.2.2",
+    "@types/d3-drag": "^3.0.7",
+    "@types/d3-geo": "^3.1.0",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-scale-chromatic": "^3.1.0",
+    "@types/d3-selection": "^3.0.11",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^26.0.1",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0",
+    "vite": "^8.1.1"
+  }
+}

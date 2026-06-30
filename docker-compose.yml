@@ -1,0 +1,23 @@
+# Containerized dev server (matches the house pattern: cioport, pixie/office, daccord).
+#   docker compose up        start Vite in a container at http://localhost:5173
+#   docker compose down      stop + remove the session cleanly (kill switch)
+#
+# Node/pnpm live in the container, not on the host. Source is bind-mounted, so edits
+# hot-reload. Native `pnpm dev` on the host also works and is unaffected.
+#
+# pnpm's store is pinned INSIDE the node_modules volume (--store-dir) so it shares a
+# filesystem with node_modules and hardlinks cleanly. Otherwise pnpm falls back to a
+# project-local .pnpm-store, which (via the bind mount) would litter the repo.
+services:
+  web:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "corepack enable pnpm && pnpm install --store-dir /app/node_modules/.pnpm-store && pnpm dev"
+    ports:
+      - '5173:5173'
+    volumes:
+      - .:/app # source: host edits flow into the container and hot-reload
+      - node_modules:/app/node_modules # container's Linux node_modules + pnpm store (isolated from host)
+
+volumes:
+  node_modules:
