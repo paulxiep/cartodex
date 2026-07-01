@@ -45,19 +45,31 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Cartograms:** a per-feature affine transform over an equal-area base (non-contiguous)
 - **Data:** `topojson-client`; world-atlas geometry from a CDN; a licensing-aware per-dataset loader (`baked` / `client` / Worker-proxy)
 - **Language / build / quality:** TypeScript (strict), Vite, **pnpm** (global hard-linked store), ESLint (typescript-eslint)
-- **Delivery:** static `dist/` served from a CDN; a scheduled rebuild refreshes the baked data
+- **Delivery:** static `dist/` served from a CDN; data snapshots are refreshed off-build by a scheduled producer and read same-origin, so an app deploy never waits on a source
 
 ## Current state
 
-**M0, scaffold.** The two-axis engine runs end to end: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that bakes the data. The wired datasets are World Bank population (215 countries, joined to geometry through the ISO-3166 crosswalk) and OpenFlights airports + routes. Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
+**M0 scaffold and M1 country fundamentals complete.** The two-axis engine runs end to end, the layer catalog now spans country fundamentals, and data delivery is decoupled from the app build.
 
-Not wired in the scaffold: cargo ports, shipping and relations `flow` data, and the contiguous cartogram.
+**M0 — Scaffold** laid the engine: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that emits id-keyed snapshots. First data: World Bank population and OpenFlights airports + routes.
+
+**M1 — Country fundamentals** turns the single population layer into a themed catalog and moves data off the app build:
+
+- **A declarative indicator catalog** — around 30 World Bank indicators (CC-BY 4.0) across **demographics, economy, resources/environment, and health**: GDP and GDP per capita, life expectancy, fertility, CO2 per capita, forest and arable land, renewable energy, and more. Each is a `region` choropleth joined to geometry through the ISO-3166 crosswalk, and adding one is a single config row, not new code.
+- **Themed composer** — layer toggles are grouped by theme, and any indicator composes with any view (choropleth under the projections, scaled in place under the cartogram).
+- **Data off the build** — a scheduled producer fetches the sources and writes the snapshots to private storage; the app reads them same-origin, so the store is never public and an app deploy never depends on a source being up. Each dataset is fetched independently and non-destructively: one source failing never blanks another or overwrites good data with a partial result.
+- **Interaction that holds** — toggling a layer keeps the globe/polar orientation and zoom instead of snapping back to the pole.
+
+Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
+
+Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade `flow` relations, cargo ports and shipping, and the contiguous cartogram.
 
 ## Roadmap
 
 | Milestone | Capability | Status |
 |-----------|-----------|--------|
 | **M0, scaffold** | Two-axis engine (`createMap`, view/layer/dataset registries, compatibility table), four layer primitives, gallery + composer, licensing-aware loader, data producer, and the TypeScript + ESLint + Vite + pnpm toolchain | Done |
+| **M1 — Country fundamentals** | ~30 World Bank indicators (demographics · economy · resources · health) as themed `region` choropleths from a declarative catalog; data decoupled from the build (scheduled producer → private storage, read same-origin); interaction state preserved across layer toggles | Done |
 
 Later milestones are not scoped yet and will be added here as work is defined.
 
@@ -75,5 +87,6 @@ Contributions are welcome. Contributors sign a Contributor License Agreement (Li
 
 - **Maps & projections:** `d3-geo` · `Azimuthal Equidistant (Polar)` · `Orthographic` · `Equirectangular` · `Cartogram (Non-contiguous)` · `Density-Equalizing (D∘P, equal-area base)` · `Great-Circle Densification`
 - **Architecture:** `Two Orthogonal Axes (View x Layers)` · `Layer Primitives x Datasets` · `Routes = Relations (flow)` · `Engine / App Boundary` · `Open View/Layer/Dataset Registries` · `Compatibility Table` · `Publishable Engine`
-- **Data & licensing:** `TopoJSON (world-atlas)` · `World Bank · OpenFlights` · `Licensing-Aware Loader (baked · client-fetch · Worker-proxy)` · `Attribution / Display Rights` · `Id-Keyed Snapshots` · `Geometry-Join Crosswalk (ISO-3166)` · `Scheduled Producer Rebuild`
-- **Toolchain & delivery:** `TypeScript (strict)` · `ESLint (typescript-eslint)` · `Vite` · `pnpm (global hard-linked store)` · `Static Build on CDN` · `Scheduled Rebuild`
+- **Data & licensing:** `TopoJSON (world-atlas)` · `World Bank WDI · OpenFlights` · `Licensing-Aware Loader (baked · client-fetch · Worker-proxy)` · `Attribution / Display Rights` · `Id-Keyed Snapshots` · `Geometry-Join Crosswalk (ISO-3166)` · `Off-Build Scheduled Producer`
+- **Country data:** `World Bank WDI (CC-BY 4.0)` · `~30 Indicators (Demographics · Economy · Resources · Health)` · `Declarative Indicator Registry` · `Themed Layer Grouping` · `Latest Non-Null Value Select (mrv)`
+- **Toolchain & delivery:** `TypeScript (strict)` · `ESLint (typescript-eslint)` · `Vite` · `pnpm (global hard-linked store)` · `Static App on CDN` · `Off-Build Producer` · `Private Storage, Same-Origin Read`

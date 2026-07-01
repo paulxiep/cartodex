@@ -69,8 +69,10 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
 
   // Interaction state persists across re-renders (a layer toggle or resize rebuilds the
   // SVG, but must not reset the user's orientation). Cleared only on an explicit setView.
+  // Zoom is stored as a RATIO to the view's fitSize baseline (not an absolute px scale),
+  // so a resize still refits the globe while keeping the user's zoom level.
   let savedRotate: [number, number, number] | null = null
-  let savedScale: number | null = null
+  let savedScaleK: number | null = null
   let savedZoom: ZoomTransform | null = null
 
   function teardown(): void {
@@ -81,10 +83,13 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
     const view = getView(viewId)
     const projector = view.build(width, height)
     // Restore a globe/polar orientation carried over from a previous render (before the
-    // first paint, so the restored view shows immediately).
+    // first paint, so the restored view shows immediately). Scale is applied as a ratio of
+    // this size's fitSize baseline, so the globe stays fit after a resize.
+    const baseRotatableScale =
+      view.rotatable && projector.projection ? projector.projection.scale() : null
     if (view.rotatable && projector.projection) {
       if (savedRotate) projector.projection.rotate(savedRotate)
-      if (savedScale != null) projector.projection.scale(savedScale)
+      if (savedScaleK != null && baseRotatableScale) projector.projection.scale(baseRotatableScale * savedScaleK)
     }
     const ctx: RenderContext = { view, projector, width, height }
 
@@ -153,7 +158,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
       const proj = projector.projection
       attachRotate(svg, proj, () => {
         savedRotate = proj.rotate()
-        savedScale = proj.scale()
+        savedScaleK = baseRotatableScale ? proj.scale() / baseRotatableScale : null
         paint()
       })
     } else {
@@ -189,7 +194,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
       viewId = next
       // A deliberate view switch starts from that view's default orientation.
       savedRotate = null
-      savedScale = null
+      savedScaleK = null
       savedZoom = null
       render()
     },

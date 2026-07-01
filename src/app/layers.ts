@@ -136,7 +136,10 @@ export async function buildLayers(ids: string[]): Promise<ResolvedLayer[]> {
   const out: ResolvedLayer[] = []
   settled.forEach((r, i) => {
     if (r.status === 'fulfilled') out.push(r.value)
-    else console.warn(`layer ${defs[i]!.id} unavailable: ${(r.reason as Error).message}`)
+    else {
+      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason)
+      console.warn(`layer ${defs[i]!.id} unavailable: ${reason}`)
+    }
   })
   return out
 }

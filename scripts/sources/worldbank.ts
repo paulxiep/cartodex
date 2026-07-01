@@ -40,6 +40,7 @@ export async function buildWorldBankIndicator(
     const num = row.countryiso3code ? a3ToNum.get(row.countryiso3code) : undefined
     if (!num || typeof row.value !== 'number' || !Number.isFinite(row.value)) continue
     const year = Number(row.date)
+    if (!Number.isFinite(year)) continue // a NaN year would wrongly pin as "best" forever
     const cur = best.get(num)
     if (!cur || year > cur.year) best.set(num, { year, value: row.value })
   }
