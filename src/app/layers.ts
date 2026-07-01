@@ -10,6 +10,7 @@ import {
   loadPointData,
   loadFlowData,
 } from './datasets'
+import { WDI_INDICATORS } from './indicators'
 
 export interface LayerDef {
   id: string
@@ -23,6 +24,41 @@ export interface LayerDef {
 // (the baked `value`). 1 shows all ~18.8k pairs; raise it to thin the network. This is
 // the single place to tune it (a UI control can bind here later).
 export const FLIGHT_MIN_COUNT = 2
+
+// Region-choropleth layer factory: any region dataset becomes a layer by id + ramp. The
+// layer id is `region-<datasetId>`, so presets referencing e.g. `region-population` are
+// stable. Reuses loadCountries + loadRegionValues; no per-indicator code.
+function regionLayer(datasetId: string, ramp: string): LayerDef {
+  const meta = DATASETS[datasetId]!
+  return {
+    id: `region-${datasetId}`,
+    label: `${meta.label} (choropleth)`,
+    primitive: 'region',
+    datasetId,
+    async build() {
+      const [features, region] = await Promise.all([
+        loadCountries(),
+        loadRegionValues(meta),
+      ])
+      return {
+        id: `region-${datasetId}`,
+        primitive: 'region',
+        features,
+        values: region.values,
+        valueDomain: region.domain,
+        style: { ramp, stroke: 'rgba(0,0,0,0.25)', strokeWidth: 0.4 },
+      }
+    },
+  }
+}
+
+// One region layer per World Bank indicator, generated from the shared catalog.
+const WDI_LAYERS: Record<string, LayerDef> = Object.fromEntries(
+  WDI_INDICATORS.map((ind) => {
+    const layer = regionLayer(ind.id, ind.ramp)
+    return [layer.id, layer]
+  }),
+)
 
 export const LAYERS: Record<string, LayerDef> = {
   'base-land': {
@@ -40,26 +76,7 @@ export const LAYERS: Record<string, LayerDef> = {
     },
   },
 
-  'region-population': {
-    id: 'region-population',
-    label: 'Population (choropleth)',
-    primitive: 'region',
-    datasetId: 'population',
-    async build() {
-      const [features, region] = await Promise.all([
-        loadCountries(),
-        loadRegionValues(DATASETS['population']!),
-      ])
-      return {
-        id: 'region-population',
-        primitive: 'region',
-        features,
-        values: region.values,
-        valueDomain: region.domain,
-        style: { ramp: 'YlGnBu', stroke: 'rgba(0,0,0,0.25)', strokeWidth: 0.4 },
-      }
-    },
-  },
+  ...WDI_LAYERS,
 
   'point-airports': {
     id: 'point-airports',
@@ -107,10 +124,21 @@ export const LAYERS: Record<string, LayerDef> = {
 
 export const LAYER_LIST: LayerDef[] = Object.values(LAYERS)
 
-/** Resolve a set of layer ids into engine ResolvedLayers (in the given order). */
+/**
+ * Resolve a set of layer ids into engine ResolvedLayers (in the given order). A layer
+ * whose dataset is unreachable (snapshot not yet built, source down) is dropped with a
+ * warning rather than failing the whole compose, so the rest of the map still renders.
+ * The returned ids are a subset of the input; the caller can diff to flag what is missing.
+ */
 export async function buildLayers(ids: string[]): Promise<ResolvedLayer[]> {
   const defs = ids.map((id) => LAYERS[id]).filter((d): d is LayerDef => d != null)
-  return Promise.all(defs.map((d) => d.build()))
+  const settled = await Promise.allSettled(defs.map((d) => d.build()))
+  const out: ResolvedLayer[] = []
+  settled.forEach((r, i) => {
+    if (r.status === 'fulfilled') out.push(r.value)
+    else console.warn(`layer ${defs[i]!.id} unavailable: ${(r.reason as Error).message}`)
+  })
+  return out
 }
 
 /** Attribution strings for the datasets backing the active layers. */

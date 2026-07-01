@@ -32,8 +32,5 @@ export function mountGallery(root: HTMLElement): void {
     </header>
     <section class="grid">
       ${PRESETS.map(cell).join('')}
-    </section>
-    <footer class="site-foot">
-      Two orthogonal axes (view × layers) over one typed engine · see <code>docs/ARCHITECTURE.md</code>
-    </footer>`
+    </section>`
 }

@@ -4,6 +4,7 @@ dist
 dist-ssr
 *.local
 .DS_Store
+.env
 
 # Generated dataset snapshots, reproduced by `pnpm build-data` (run before every
 # build, and in CI), so they are build artifacts, not source. Don't commit.
@@ -26,3 +27,9 @@ public/data/
 !/CONTRIBUTING.md
 !/CLA-individual.md
 !/CLA-corporate.md
+
+# Deployment is kept local/internal: platform specifics (Makefile, Cloudflare Worker/
+# Pages config) stay out of the tracked repo. See PRODUCTION.md (also gitignored).
+/Makefile
+/deploy/
+/wrangler.toml

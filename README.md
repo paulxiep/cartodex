@@ -36,7 +36,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
         drag-rotate + wheel-zoom on globe-like views    │  preset grid of (view x layers) · view      │
                                                          │  picker · layer toggles · attribution       │
                                                          └─────────────────────────────────────────────┘
-   delivery: static build -> Cloudflare Pages (+ custom domain); scheduled rebuild refreshes data
+   delivery: static build -> CDN; scheduled rebuild refreshes data
 ```
 
 ## Tech stack
@@ -45,7 +45,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Cartograms:** a per-feature affine transform over an equal-area base (non-contiguous)
 - **Data:** `topojson-client`; world-atlas geometry from a CDN; a licensing-aware per-dataset loader (`baked` / `client` / Worker-proxy)
 - **Language / build / quality:** TypeScript (strict), Vite, **pnpm** (global hard-linked store), ESLint (typescript-eslint)
-- **Host:** Cloudflare Pages + custom domain; GitHub Action cron for data refresh
+- **Delivery:** static `dist/` served from a CDN; a scheduled rebuild refreshes the baked data
 
 ## Current state
 
@@ -76,4 +76,4 @@ Contributions are welcome. Contributors sign a Contributor License Agreement (Li
 - **Maps & projections:** `d3-geo` · `Azimuthal Equidistant (Polar)` · `Orthographic` · `Equirectangular` · `Cartogram (Non-contiguous)` · `Density-Equalizing (D∘P, equal-area base)` · `Great-Circle Densification`
 - **Architecture:** `Two Orthogonal Axes (View x Layers)` · `Layer Primitives x Datasets` · `Routes = Relations (flow)` · `Engine / App Boundary` · `Open View/Layer/Dataset Registries` · `Compatibility Table` · `Publishable Engine`
 - **Data & licensing:** `TopoJSON (world-atlas)` · `World Bank · OpenFlights` · `Licensing-Aware Loader (baked · client-fetch · Worker-proxy)` · `Attribution / Display Rights` · `Id-Keyed Snapshots` · `Geometry-Join Crosswalk (ISO-3166)` · `Scheduled Producer Rebuild`
-- **Toolchain & delivery:** `TypeScript (strict)` · `ESLint (typescript-eslint)` · `Vite` · `pnpm (global hard-linked store)` · `Cloudflare Pages + Custom Domain` · `GitHub Action Cron`
+- **Toolchain & delivery:** `TypeScript (strict)` · `ESLint (typescript-eslint)` · `Vite` · `pnpm (global hard-linked store)` · `Static Build on CDN` · `Scheduled Rebuild`
