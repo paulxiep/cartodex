@@ -74,14 +74,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
 }
 .tag.view { color: var(--accent); border-color: rgba(122, 200, 255, 0.35); }
 
-.site-foot {
-  padding: 24px 32px 48px;
-  max-width: 1100px;
-  margin: 0 auto;
-  color: var(--muted);
-  font-size: 13px;
-  border-top: 1px solid var(--line);
-}
 
 /* ── Composer ────────────────────────────────────────────── */
 .composer { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
@@ -114,6 +106,16 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
 .view-btn:hover { border-color: var(--accent); }
 .view-btn.active { background: rgba(122, 200, 255, 0.12); border-color: var(--accent); }
 
+.layer-group {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 14px 0 4px;
+  opacity: 0.85;
+}
+.layer-group:first-child { margin-top: 4px; }
+
 .layer-row {
   display: flex;
   align-items: center;
@@ -123,6 +125,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
   cursor: pointer;
 }
 .layer-row.disabled { opacity: 0.4; cursor: not-allowed; }
+.layer-row.unavailable span { color: var(--muted); }
+.layer-row.unavailable span::after { content: ' (unavailable)'; font-size: 11px; opacity: 0.7; }
 
 .stage { position: relative; }
 .map { position: absolute; inset: 0; }
