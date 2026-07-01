@@ -5,7 +5,28 @@
 import { createMap, getView, compatible, VIEW_LIST } from '../engine'
 import type { MapHandle, ViewId } from '../engine'
 import { LAYER_LIST, LAYERS, buildLayers, attributionsFor } from './layers'
+import type { LayerDef } from './layers'
+import { DATASETS } from './datasets'
+import { THEME_ORDER, THEME_LABELS } from './indicators'
 import { PRESETS } from './presets'
+
+// Group layer toggles for display: one section per indicator theme (in catalog order),
+// then a trailing "Base & transport" section for structural / non-themed layers.
+function groupedLayers(): Array<{ label: string; defs: LayerDef[] }> {
+  const byTheme = new Map<string, LayerDef[]>()
+  const other: LayerDef[] = []
+  for (const def of LAYER_LIST) {
+    const theme = def.datasetId ? DATASETS[def.datasetId]?.theme : undefined
+    if (theme) (byTheme.get(theme) ?? byTheme.set(theme, []).get(theme)!).push(def)
+    else other.push(def)
+  }
+  const groups = THEME_ORDER.filter((t) => byTheme.has(t)).map((t) => ({
+    label: THEME_LABELS[t],
+    defs: byTheme.get(t)!,
+  }))
+  if (other.length) groups.push({ label: 'Base & transport', defs: other })
+  return groups
+}
 
 interface State {
   view: ViewId
@@ -57,6 +78,9 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
 
   let state = parseHash()
   let handle: MapHandle | null = null
+  // Layers requested this render whose dataset failed to load (snapshot missing / source
+  // down). The toggles stay on so they recover on the next attempt, but are flagged.
+  const unavailable = new Set<string>()
 
   // View picker
   for (const v of VIEW_LIST) {
@@ -68,15 +92,21 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     viewsEl.appendChild(btn)
   }
 
-  // Layer toggles
-  for (const def of LAYER_LIST) {
-    const id = `layer-${def.id}`
-    const label = document.createElement('label')
-    label.className = 'layer-row'
-    label.innerHTML = `<input type="checkbox" id="${id}" /> <span>${def.label}</span>`
-    const input = label.querySelector('input')!
-    input.addEventListener('change', () => toggleLayer(def.id, input.checked))
-    layersEl.appendChild(label)
+  // Layer toggles, grouped by theme
+  for (const group of groupedLayers()) {
+    const heading = document.createElement('h3')
+    heading.className = 'layer-group'
+    heading.textContent = group.label
+    layersEl.appendChild(heading)
+    for (const def of group.defs) {
+      const id = `layer-${def.id}`
+      const label = document.createElement('label')
+      label.className = 'layer-row'
+      label.innerHTML = `<input type="checkbox" id="${id}" /> <span>${def.label}</span>`
+      const input = label.querySelector('input')!
+      input.addEventListener('change', () => toggleLayer(def.id, input.checked))
+      layersEl.appendChild(label)
+    }
   }
 
   function refreshControls(): void {
@@ -89,7 +119,11 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
       const ok = compatible(view, def.primitive)
       input.disabled = !ok
       input.checked = ok && state.layers.includes(def.id)
-      input.closest('.layer-row')!.classList.toggle('disabled', !ok)
+      const row = input.closest('.layer-row')!
+      row.classList.toggle('disabled', !ok)
+      const missing = unavailable.has(def.id)
+      row.classList.toggle('unavailable', missing)
+      ;(row as HTMLElement).title = missing ? 'data unavailable' : ''
     }
     const attrs = attributionsFor(compatibleLayers(state))
     attrEl.textContent = attrs.length ? attrs.join('  ·  ') : ''
@@ -98,6 +132,9 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   async function apply(rebuildView: boolean): Promise<void> {
     const ids = compatibleLayers(state)
     const resolved = await buildLayers(ids)
+    const resolvedIds = new Set(resolved.map((l) => l.id))
+    unavailable.clear()
+    for (const id of ids) if (!resolvedIds.has(id)) unavailable.add(id)
     if (!handle) {
       handle = createMap(mapEl, { view: state.view, layers: resolved })
     } else {

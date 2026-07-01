@@ -7,6 +7,7 @@
 import { extent } from 'd3-array'
 import type { Feature, FeatureCollection, Point } from 'geojson'
 import { flowFeature } from '../engine'
+import { WDI_INDICATORS, type Theme } from './indicators'
 
 export type DatasetKind = 'region' | 'point' | 'flow'
 
@@ -20,20 +21,35 @@ export interface DatasetMeta {
   kind: DatasetKind
   source: DataSource
   attribution: string
+  /** groups the dataset in the composer; unset for structural/transport layers. */
+  theme?: Theme
   /** for `flow` datasets: the `point` dataset whose ids the endpoints reference. */
   endpointsFrom?: string
 }
 
-const DATA_BASE = `${import.meta.env.BASE_URL}data/`
+// Where the browser reads baked snapshots. Dev serves them from the app itself
+// (`public/data/` -> `./data/`); production points VITE_DATA_BASE at the R2/CDN host that
+// the scheduled producer Worker writes to, so data refreshes without an app redeploy.
+const DATA_BASE = import.meta.env.VITE_DATA_BASE ?? `${import.meta.env.BASE_URL}data/`
+
+// World Bank WDI region datasets, generated from the shared indicator catalog. Each maps
+// to a baked wdi-<id>.json snapshot produced by scripts/build-data.ts.
+const WDI_DATASETS: Record<string, DatasetMeta> = Object.fromEntries(
+  WDI_INDICATORS.map((ind) => [
+    ind.id,
+    {
+      id: ind.id,
+      label: ind.label,
+      kind: 'region' as const,
+      source: { mode: 'baked' as const, url: `${DATA_BASE}wdi-${ind.id}.json` },
+      attribution: `${ind.label}: World Bank (${ind.code}, CC-BY 4.0) · ISO-3166 crosswalk`,
+      theme: ind.theme,
+    },
+  ]),
+)
 
 export const DATASETS: Record<string, DatasetMeta> = {
-  population: {
-    id: 'population',
-    label: 'Population',
-    kind: 'region',
-    source: { mode: 'baked', url: `${DATA_BASE}population.json` },
-    attribution: 'Population: World Bank (SP.POP.TOTL) · ISO-3166 crosswalk',
-  },
+  ...WDI_DATASETS,
   airports: {
     id: 'airports',
     label: 'Airports',

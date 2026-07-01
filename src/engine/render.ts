@@ -5,6 +5,7 @@
 import { select } from 'd3-selection'
 import { drag } from 'd3-drag'
 import { zoom, zoomIdentity } from 'd3-zoom'
+import type { ZoomTransform } from 'd3-zoom'
 import { geoGraticule10 } from 'd3-geo'
 import type { Selection } from 'd3-selection'
 import type { GeoGeometryObjects, GeoProjection } from 'd3-geo'
@@ -66,6 +67,14 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
   let viewId: ViewId = options.view
   let layers: ResolvedLayer[] = options.layers
 
+  // Interaction state persists across re-renders (a layer toggle or resize rebuilds the
+  // SVG, but must not reset the user's orientation). Cleared only on an explicit setView.
+  // Zoom is stored as a RATIO to the view's fitSize baseline (not an absolute px scale),
+  // so a resize still refits the globe while keeping the user's zoom level.
+  let savedRotate: [number, number, number] | null = null
+  let savedScaleK: number | null = null
+  let savedZoom: ZoomTransform | null = null
+
   function teardown(): void {
     container.replaceChildren()
   }
@@ -73,6 +82,15 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
   function renderSvg(width: number, height: number): void {
     const view = getView(viewId)
     const projector = view.build(width, height)
+    // Restore a globe/polar orientation carried over from a previous render (before the
+    // first paint, so the restored view shows immediately). Scale is applied as a ratio of
+    // this size's fitSize baseline, so the globe stays fit after a resize.
+    const baseRotatableScale =
+      view.rotatable && projector.projection ? projector.projection.scale() : null
+    if (view.rotatable && projector.projection) {
+      if (savedRotate) projector.projection.rotate(savedRotate)
+      if (savedScaleK != null && baseRotatableScale) projector.projection.scale(baseRotatableScale * savedScaleK)
+    }
     const ctx: RenderContext = { view, projector, width, height }
 
     const svg = select(container)
@@ -137,14 +155,22 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
     paint()
 
     if (view.rotatable && projector.projection) {
-      attachRotate(svg, projector.projection, paint)
+      const proj = projector.projection
+      attachRotate(svg, proj, () => {
+        savedRotate = proj.rotate()
+        savedScaleK = baseRotatableScale ? proj.scale() / baseRotatableScale : null
+        paint()
+      })
     } else {
       // Flat/cartogram views: pan + zoom by transforming the root group.
       const zoomBehavior = zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.6, 12])
-        .on('zoom', (event) => root.attr('transform', event.transform.toString()))
+        .on('zoom', (event) => {
+          savedZoom = event.transform
+          root.attr('transform', event.transform.toString())
+        })
       svg.call(zoomBehavior)
-      svg.call(zoomBehavior.transform, zoomIdentity)
+      svg.call(zoomBehavior.transform, savedZoom ?? zoomIdentity)
     }
   }
 
@@ -166,6 +192,10 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
   return {
     setView(next: ViewId) {
       viewId = next
+      // A deliberate view switch starts from that view's default orientation.
+      savedRotate = null
+      savedScaleK = null
+      savedZoom = null
       render()
     },
     setLayers(next: ResolvedLayer[]) {
