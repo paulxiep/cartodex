@@ -2,14 +2,16 @@
 // into the composer. Adding a showcase is a new entry in presets.ts.
 
 import { getView } from '../engine'
-import { LAYERS } from './layers'
+import { DATASETS } from './catalog'
 import { PRESETS, presetHash } from './presets'
 import type { Preset } from './presets'
 
 function cell(p: Preset): string {
   const href = `${import.meta.env.BASE_URL}compose.html${presetHash(p)}`
   const view = getView(p.view).label
-  const layers = p.layers.map((id) => LAYERS[id]?.label ?? id).join(' · ')
+  const layers = p.bindings
+    .map((b) => (b.channel === 'base' ? 'Base' : DATASETS[b.dataset]?.label ?? b.dataset))
+    .join(' · ')
   return `
     <a class="card" href="${href}">
       <div class="card-body">

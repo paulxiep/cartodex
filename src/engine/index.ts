@@ -5,17 +5,24 @@
 export { createMap } from './render'
 export { VIEWS, VIEW_LIST, getView } from './views'
 export { PRIMITIVES, getPrimitive } from './primitives'
+export { CHANNELS, CHANNEL_LIST, getChannel } from './channels'
 export { compatible } from './compatible'
 
 // Geometry + geo helpers (generic, not topic datasets) for the app's data layer.
 export { loadCountries, loadBorders, loadLand } from './lib/geodata'
 export { flowFeature, greatCirclePoints } from './lib/greatCircle'
-export { choropleth, radiusScale, valueOf, interpolatorByName } from './lib/scales'
+export { makeColorScale, radiusScale, valueOf, interpolatorByName } from './lib/scales'
+export type { ColorFn } from './lib/scales'
 
 export type {
   Primitive,
+  ChannelId,
+  ChannelCapacity,
+  Channel,
+  DatasetKind,
+  ScaleType,
+  ScaleSpec,
   ViewKind,
-  CartogramKind,
   ViewId,
   View,
   Projector,

@@ -1,13 +1,15 @@
-// Which (view, layer-primitive) cells are meaningful. The composer uses this to grey
-// out nonsensical combinations instead of rendering nonsense.
+// Which (view, channel) cells are meaningful. The composer uses this to disable channel
+// slots that have no meaning under the active view, instead of rendering nonsense.
 //
-// Cartogram views replace area layout with value-driven shapes (scaled regions), so
-// only the `region` primitive registers against them; overlays like points, flows, and
-// base have no stable position there. Projection views accept all four primitives.
+// Today only the `area` channel is gated: an in-place cartogram scaling assumes true areas,
+// so it needs an equal-area base (Equal Earth). Every other channel - choropleth, bubble,
+// markers, arcs, base - is valid on all views. New gates are added here as data.
 
-import type { Primitive, View } from './types'
+import type { ChannelId, View } from './types'
+import { getChannel } from './channels'
 
-export function compatible(view: View, primitive: Primitive): boolean {
-  if (view.kind === 'cartogram') return primitive === 'region'
+export function compatible(view: View, channel: ChannelId): boolean {
+  const ch = getChannel(channel)
+  if (ch.requiresEqualArea && !view.equalArea) return false
   return true
 }

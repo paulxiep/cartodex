@@ -1,61 +1,78 @@
-// The composer: pick a View, toggle Layers, and the engine recomposes. State lives in
-// the URL hash (#view=...&layers=a,b,c) so any combination is shareable/deep-linkable.
-// Incompatible (view × primitive) cells are disabled via the engine's compatible().
+// The composer: pick a View, then bind datasets into display Channels, and the engine
+// recomposes. Each channel is a slot: single-occupancy channels (choropleth, area, bubble)
+// are a dropdown (one dataset or none — a second choice replaces the first); multi-occupancy
+// channels (markers, arcs) are a checklist; base is a structural on/off. Channels the active
+// view cannot render (e.g. area off an equal-area base) are disabled via compatible(). State
+// lives in the URL hash so any combination is shareable/deep-linkable.
 
-import { createMap, getView, compatible, VIEW_LIST } from '../engine'
-import type { MapHandle, ViewId } from '../engine'
-import { LAYER_LIST, LAYERS, buildLayers, attributionsFor } from './layers'
-import type { LayerDef } from './layers'
-import { DATASETS } from './datasets'
-import { THEME_ORDER, THEME_LABELS } from './indicators'
+import { createMap, getView, compatible, VIEW_LIST, CHANNEL_LIST } from '../engine'
+import type { Channel, MapHandle, ViewId } from '../engine'
+import { buildLayers, bindingKey, attributionsFor } from './layers'
+import type { Binding } from './layers'
+import { DATASETS, datasetsOfKind, DOMAIN_ORDER, DOMAIN_LABELS } from './catalog'
+import type { Dataset } from './catalog'
 import { PRESETS } from './presets'
+import { parseHash, toHash } from './state'
+import type { State } from './state'
 
-// Group layer toggles for display: one section per indicator theme (in catalog order),
-// then a trailing "Base & transport" section for structural / non-themed layers.
-function groupedLayers(): Array<{ label: string; defs: LayerDef[] }> {
-  const byTheme = new Map<string, LayerDef[]>()
-  const other: LayerDef[] = []
-  for (const def of LAYER_LIST) {
-    const theme = def.datasetId ? DATASETS[def.datasetId]?.theme : undefined
-    if (theme) (byTheme.get(theme) ?? byTheme.set(theme, []).get(theme)!).push(def)
-    else other.push(def)
+const DEFAULT: State = { view: PRESETS[0]!.view, bindings: PRESETS[0]!.bindings }
+
+// Group a channel's candidate datasets by domain, in taxonomy order, for <optgroup>s.
+function byDomain(datasets: Dataset[]): Array<{ label: string; datasets: Dataset[] }> {
+  return DOMAIN_ORDER.map((d) => ({
+    label: DOMAIN_LABELS[d],
+    datasets: datasets.filter((ds) => ds.domain === d),
+  })).filter((g) => g.datasets.length > 0)
+}
+
+function esc(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+}
+
+// Static markup for one channel slot (options never change; only value/enabled/checked do).
+function channelSlotHtml(ch: Channel): string {
+  if (ch.capacity === 'structural') {
+    return `
+      <div class="channel-slot" data-channel="${ch.id}">
+        <label class="channel-row"><input type="checkbox" data-role="base" /> <span>${esc(ch.label)}</span></label>
+      </div>`
   }
-  const groups = THEME_ORDER.filter((t) => byTheme.has(t)).map((t) => ({
-    label: THEME_LABELS[t],
-    defs: byTheme.get(t)!,
-  }))
-  if (other.length) groups.push({ label: 'Base & transport', defs: other })
-  return groups
-}
-
-interface State {
-  view: ViewId
-  layers: string[]
-}
-
-const DEFAULT: State = { view: PRESETS[0]!.view, layers: PRESETS[0]!.layers }
-
-function parseHash(): State {
-  const h = location.hash.replace(/^#/, '')
-  const params = new URLSearchParams(h)
-  const view = (params.get('view') as ViewId | null) ?? DEFAULT.view
-  const layersParam = params.get('layers')
-  const layers = layersParam ? layersParam.split(',').filter((id) => id in LAYERS) : DEFAULT.layers
-  const known = VIEW_LIST.some((v) => v.id === view)
-  return { view: known ? view : DEFAULT.view, layers }
-}
-
-function writeHash(state: State): void {
-  const next = `#view=${state.view}&layers=${state.layers.join(',')}`
-  if (location.hash !== next) history.replaceState(null, '', next)
-}
-
-function compatibleLayers(state: State): string[] {
-  const view = getView(state.view)
-  return state.layers.filter((id) => {
-    const def = LAYERS[id]
-    return def != null && compatible(view, def.primitive)
-  })
+  const datasets = ch.datasetKind ? datasetsOfKind(ch.datasetKind) : []
+  if (ch.capacity === 'single') {
+    const groups = byDomain(datasets)
+      .map(
+        (g) =>
+          `<optgroup label="${esc(g.label)}">${g.datasets
+            .map((d) => `<option value="${d.id}">${esc(d.label)}</option>`)
+            .join('')}</optgroup>`,
+      )
+      .join('')
+    return `
+      <div class="channel-slot" data-channel="${ch.id}">
+        <label class="channel-head">${esc(ch.label)}</label>
+        <select data-role="single">
+          <option value="">— none —</option>
+          ${groups}
+        </select>
+      </div>`
+  }
+  // multi
+  const rows = byDomain(datasets)
+    .map(
+      (g) =>
+        g.datasets
+          .map(
+            (d) =>
+              `<label class="channel-row"><input type="checkbox" data-role="multi" value="${d.id}" /> <span>${esc(d.label)}</span></label>`,
+          )
+          .join(''),
+    )
+    .join('')
+  return `
+    <div class="channel-slot" data-channel="${ch.id}">
+      <label class="channel-head">${esc(ch.label)}</label>
+      <div class="channel-multi">${rows}</div>
+    </div>`
 }
 
 export async function mountComposer(root: HTMLElement): Promise<void> {
@@ -64,22 +81,27 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
       <a class="back" href="${import.meta.env.BASE_URL}">← gallery</a>
       <h1>Cartodex</h1>
       <section><h2>View</h2><div class="views" id="views"></div></section>
-      <section><h2>Layers</h2><div class="layers" id="layers"></div></section>
+      <section><h2>Channels</h2><div class="channels" id="channels">
+        ${CHANNEL_LIST.map(channelSlotHtml).join('')}
+      </div></section>
     </aside>
     <main class="stage">
       <div id="map" class="map"></div>
+      <div id="loading" class="loading" hidden>Loading…</div>
       <footer id="attribution" class="attribution"></footer>
     </main>`
 
   const mapEl = root.querySelector<HTMLDivElement>('#map')!
   const viewsEl = root.querySelector<HTMLDivElement>('#views')!
-  const layersEl = root.querySelector<HTMLDivElement>('#layers')!
+  const channelsEl = root.querySelector<HTMLDivElement>('#channels')!
+  const loadingEl = root.querySelector<HTMLDivElement>('#loading')!
   const attrEl = root.querySelector<HTMLElement>('#attribution')!
 
-  let state = parseHash()
+  let state = parseHash(location.hash, DEFAULT)
   let handle: MapHandle | null = null
-  // Layers requested this render whose dataset failed to load (snapshot missing / source
-  // down). The toggles stay on so they recover on the next attempt, but are flagged.
+  let applyToken = 0
+  // Bindings whose dataset failed to load this render (snapshot missing / source down). The
+  // selection stays so it recovers on retry, but the slot is flagged.
   const unavailable = new Set<string>()
 
   // View picker
@@ -92,56 +114,67 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     viewsEl.appendChild(btn)
   }
 
-  // Layer toggles, grouped by theme
-  for (const group of groupedLayers()) {
-    const heading = document.createElement('h3')
-    heading.className = 'layer-group'
-    heading.textContent = group.label
-    layersEl.appendChild(heading)
-    for (const def of group.defs) {
-      const id = `layer-${def.id}`
-      const label = document.createElement('label')
-      label.className = 'layer-row'
-      label.innerHTML = `<input type="checkbox" id="${id}" /> <span>${def.label}</span>`
-      const input = label.querySelector('input')!
-      input.addEventListener('change', () => toggleLayer(def.id, input.checked))
-      layersEl.appendChild(label)
+  // Wire channel-slot inputs to state mutations.
+  for (const ch of CHANNEL_LIST) {
+    const slot = channelsEl.querySelector<HTMLDivElement>(`.channel-slot[data-channel="${ch.id}"]`)!
+    if (ch.capacity === 'structural') {
+      slot.querySelector<HTMLInputElement>('input[data-role="base"]')!
+        .addEventListener('change', (e) => setBase((e.target as HTMLInputElement).checked))
+    } else if (ch.capacity === 'single') {
+      slot.querySelector<HTMLSelectElement>('select[data-role="single"]')!
+        .addEventListener('change', (e) => setSingle(ch.id, (e.target as HTMLSelectElement).value || null))
+    } else {
+      slot.querySelectorAll<HTMLInputElement>('input[data-role="multi"]').forEach((input) =>
+        input.addEventListener('change', () => toggleMulti(ch.id, input.value, input.checked)),
+      )
     }
   }
 
-  function refreshControls(): void {
+  function othersOf(channel: string): Binding[] {
+    return state.bindings.filter((b) => b.channel !== channel)
+  }
+
+  function setBase(on: boolean): void {
+    const others = othersOf('base')
+    state = { ...state, bindings: on ? [{ channel: 'base', dataset: 'land' }, ...others] : others }
+    void apply(false)
+  }
+
+  function setSingle(channel: Channel['id'], dataset: string | null): void {
+    const bindings = othersOf(channel)
+    if (dataset) bindings.push({ channel, dataset })
+    state = { ...state, bindings }
+    void apply(false)
+  }
+
+  function toggleMulti(channel: Channel['id'], dataset: string, on: boolean): void {
+    let bindings = state.bindings.filter((b) => !(b.channel === channel && b.dataset === dataset))
+    if (on) bindings = [...bindings, { channel, dataset }]
+    state = { ...state, bindings }
+    void apply(false)
+  }
+
+  // Bindings renderable under the active view (drops e.g. area on a non-equal-area view).
+  function renderable(): Binding[] {
     const view = getView(state.view)
-    viewsEl.querySelectorAll<HTMLButtonElement>('.view-btn').forEach((b) => {
-      b.classList.toggle('active', b.dataset['view'] === state.view)
-    })
-    for (const def of LAYER_LIST) {
-      const input = layersEl.querySelector<HTMLInputElement>(`#layer-${def.id}`)!
-      const ok = compatible(view, def.primitive)
-      input.disabled = !ok
-      input.checked = ok && state.layers.includes(def.id)
-      const row = input.closest('.layer-row')!
-      row.classList.toggle('disabled', !ok)
-      const missing = unavailable.has(def.id)
-      row.classList.toggle('unavailable', missing)
-      ;(row as HTMLElement).title = missing ? 'data unavailable' : ''
-    }
-    const attrs = attributionsFor(compatibleLayers(state))
-    attrEl.textContent = attrs.length ? attrs.join('  ·  ') : ''
+    return state.bindings.filter((b) => compatible(view, b.channel))
   }
 
   async function apply(rebuildView: boolean): Promise<void> {
-    const ids = compatibleLayers(state)
-    const resolved = await buildLayers(ids)
-    const resolvedIds = new Set(resolved.map((l) => l.id))
+    const token = ++applyToken
+    const active = renderable()
+    loadingEl.hidden = false
+    const { layers, failed } = await buildLayers(active)
+    if (token !== applyToken) return // a newer apply superseded this one
+    loadingEl.hidden = true
     unavailable.clear()
-    for (const id of ids) if (!resolvedIds.has(id)) unavailable.add(id)
-    if (!handle) {
-      handle = createMap(mapEl, { view: state.view, layers: resolved })
-    } else {
+    for (const k of failed) unavailable.add(k)
+    if (!handle) handle = createMap(mapEl, { view: state.view, layers })
+    else {
       if (rebuildView) handle.setView(state.view)
-      handle.setLayers(resolved)
+      handle.setLayers(layers)
     }
-    writeHash(state)
+    history.replaceState(null, '', toHash(state))
     refreshControls()
   }
 
@@ -150,16 +183,40 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     await apply(true)
   }
 
-  function toggleLayer(id: string, on: boolean): void {
-    const set = new Set(state.layers)
-    if (on) set.add(id)
-    else set.delete(id)
-    state = { ...state, layers: LAYER_LIST.filter((d) => set.has(d.id)).map((d) => d.id) }
-    void apply(false)
+  function refreshControls(): void {
+    const view = getView(state.view)
+    viewsEl.querySelectorAll<HTMLButtonElement>('.view-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset['view'] === state.view)
+    })
+    for (const ch of CHANNEL_LIST) {
+      const slot = channelsEl.querySelector<HTMLDivElement>(`.channel-slot[data-channel="${ch.id}"]`)!
+      const ok = compatible(view, ch.id)
+      slot.classList.toggle('disabled', !ok)
+      const mine = state.bindings.filter((b) => b.channel === ch.id)
+      const failedHere = mine.some((b) => unavailable.has(bindingKey(b)))
+      slot.classList.toggle('unavailable', failedHere)
+      if (ch.capacity === 'structural') {
+        const input = slot.querySelector<HTMLInputElement>('input[data-role="base"]')!
+        input.disabled = !ok
+        input.checked = mine.length > 0
+      } else if (ch.capacity === 'single') {
+        const sel = slot.querySelector<HTMLSelectElement>('select[data-role="single"]')!
+        sel.disabled = !ok
+        sel.value = mine[0]?.dataset ?? ''
+      } else {
+        const chosen = new Set(mine.map((b) => b.dataset))
+        slot.querySelectorAll<HTMLInputElement>('input[data-role="multi"]').forEach((input) => {
+          input.disabled = !ok
+          input.checked = chosen.has(input.value)
+        })
+      }
+    }
+    const attrs = attributionsFor(renderable().filter((b) => DATASETS[b.dataset] || b.channel === 'base'))
+    attrEl.textContent = attrs.length ? attrs.join('  ·  ') : ''
   }
 
   window.addEventListener('hashchange', () => {
-    state = parseHash()
+    state = parseHash(location.hash, DEFAULT)
     void apply(true)
   })
 

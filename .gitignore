@@ -24,6 +24,7 @@ public/data/
 # Governance files are public and tracked; LICENSING_STRATEGY.md stays internal.
 /*.md
 !/README.md
+!/CHANGELOG.md
 !/CONTRIBUTING.md
 !/CLA-individual.md
 !/CLA-corporate.md

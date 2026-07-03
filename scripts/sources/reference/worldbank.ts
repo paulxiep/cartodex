@@ -1,6 +1,6 @@
 // World Bank WDI source builder. One generic fetch per indicator code, joined to ISO
 // numeric geometry ids via the alpha-3 crosswalk. The indicator catalog lives in
-// src/app/indicators.ts (shared with the app); this module just turns a code into a
+// src/app/catalog.ts (shared with the app); this module just turns a code into a
 // { numericISO: value } table.
 //
 // We request `mrv=N` (most recent N years) and pick the latest non-null value per country
@@ -9,7 +9,7 @@
 // cheap fixed-window slice, and picking the newest non-null client-side gives the same
 // result while tolerating a null latest year.
 
-import { getJson } from './_shared'
+import { getJson } from '../_shared'
 
 const WB_BASE = 'https://api.worldbank.org/v2/country/all/indicator'
 // Years of history to consider; large enough to cover indicators reported every few years.

@@ -16,6 +16,7 @@
     "build": "pnpm build-data && pnpm typecheck && vite build",
     "build-data": "tsx scripts/build-data.ts",
     "refresh-data": "tsx scripts/build-data.ts --force",
+    "gen-docs": "tsx scripts/gen-docs.ts",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "lint": "eslint ."

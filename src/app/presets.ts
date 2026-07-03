@@ -1,61 +1,81 @@
-// Named (view × layers) combinations - the cells the gallery showcases. Each preset
-// is just data; it deep-links into the composer via the URL hash.
+// Named (view × bindings) combinations - the cells the gallery showcases. Each preset is
+// just data; it deep-links into the composer via the URL hash (toHash). The bivariate and
+// colored-cartogram presets showcase the M2 headline: two datasets bound at once.
 
 import type { ViewId } from '../engine'
+import type { Binding } from './layers'
+import { toHash } from './state'
 
 export interface Preset {
   id: string
   label: string
   description: string
   view: ViewId
-  layers: string[]
+  bindings: Binding[]
 }
 
 export const PRESETS: Preset[] = [
   {
     id: 'gdp-per-capita',
     label: 'GDP per capita',
-    description: 'Equirectangular choropleth of GDP per capita (World Bank).',
+    description: 'Equirectangular choropleth of GDP per capita (log scale, World Bank).',
     view: 'equirectangular',
-    layers: ['base-land', 'region-gdp-per-capita'],
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'choropleth', dataset: 'gdp-per-capita' },
+    ],
+  },
+  {
+    id: 'gdp-and-population',
+    label: 'GDP + population (bivariate)',
+    description: 'Choropleth GDP per capita with population as proportional bubbles — two datasets at once.',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'choropleth', dataset: 'gdp-per-capita' },
+      { channel: 'bubble', dataset: 'population' },
+    ],
   },
   {
     id: 'life-expectancy-globe',
     label: 'Life expectancy globe',
     description: 'Life expectancy choropleth on a spin/zoom orthographic globe.',
     view: 'orthographic',
-    layers: ['base-land', 'region-life-expectancy'],
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'choropleth', dataset: 'life-expectancy' },
+    ],
   },
   {
     id: 'population-cartogram',
     label: 'Population cartogram',
-    description: 'Each country scaled in place around its centroid by population (non-contiguous).',
-    view: 'cartogram-noncontiguous',
-    layers: ['region-population'],
+    description: 'Each country scaled in place by population on an Equal Earth base (non-contiguous).',
+    view: 'equal-earth',
+    bindings: [{ channel: 'area', dataset: 'population' }],
   },
   {
-    id: 'co2-per-capita',
-    label: 'CO2 per capita',
-    description: 'Equirectangular choropleth of CO2 emissions per capita.',
-    view: 'equirectangular',
-    layers: ['base-land', 'region-co2-per-capita'],
-  },
-  {
-    id: 'renewable-energy',
-    label: 'Renewable energy',
-    description: 'Share of final energy from renewables, equirectangular choropleth.',
-    view: 'equirectangular',
-    layers: ['base-land', 'region-renewable-energy-pct'],
+    id: 'colored-cartogram',
+    label: 'Colored cartogram',
+    description: 'Countries scaled by population and colored by GDP per capita — area + colour composed.',
+    view: 'equal-earth',
+    bindings: [
+      { channel: 'area', dataset: 'population' },
+      { channel: 'choropleth', dataset: 'gdp-per-capita' },
+    ],
   },
   {
     id: 'polar-flights',
     label: 'Polar flight routes',
     description: 'Azimuthal-equidistant polar map with airports and great-circle flight arcs (OpenFlights).',
     view: 'azimuthal-equidistant',
-    layers: ['base-land', 'point-airports', 'flow-flights'],
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'marker', dataset: 'airports' },
+      { channel: 'arc', dataset: 'flights' },
+    ],
   },
 ]
 
 export function presetHash(p: Preset): string {
-  return `#view=${p.view}&layers=${p.layers.join(',')}`
+  return toHash({ view: p.view, bindings: p.bindings })
 }
