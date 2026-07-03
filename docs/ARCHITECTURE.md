@@ -4,60 +4,70 @@ This document is the deep design behind the [README](../README.md). It explains 
 shaped the way it is, so that adding a map later is a mechanical act (register a view, or add a
 dataset) rather than a redesign.
 
-## 1. Two orthogonal axes
+## 1. Two orthogonal axes: view × channel bindings
 
-A map in cartodex is a pair:
-
-```
-map = View x Layers
-```
-
-- A **View** decides how area geometry is laid out on screen (the projection, or distortion). Exactly one view is active at a time.
-- **Layers** decide what is drawn on top (land, values, points, flows). Many compose freely.
-
-Modeling these as independent axes is the core factoring. It turns `O(views x layers)` hand-built
-maps into `O(views + layers)` engine pieces: implement each view once, each layer once, and every
-combination is reachable. The gallery is then a grid of cells, and a "new map" is usually just a new
-cell, with no new code.
-
-### Why a cartogram is a View, not a third axis
-
-A projection is a pure function `P: (lon,lat) -> (x,y)`. A contiguous cartogram is a data-driven
-distortion `D` applied in projected space:
+A map in cartodex is a **view** plus a set of **channel bindings**:
 
 ```
-cartogram = D ∘ P
+map = View × { channel: dataset (with a scale) }*
 ```
 
-Two consequences fix its place in the design:
+- A **View** decides how area geometry is laid out on screen (the projection). Exactly one is active:
+  `equirectangular`, `equal-earth` (an equal-area base), `azimuthal-equidistant` (polar), or
+  `orthographic` (spin/zoom globe).
+- A **channel binding** places a **dataset** into a display **channel** (with a **scale**). Many
+  compose freely, subject to each channel's capacity.
 
-1. **It owns area layout.** `D ∘ P` produces the final planar position of area features, so for a
-   given set of regions it is mutually exclusive with "show the true shapes under projection `P`".
-   That is exactly what the **View** axis arbitrates, so a cartogram is a member of the view axis.
-2. **Its base must be equal-area.** Density-equalization assumes you begin from true areas. The
-   azimuthal-equidistant and orthographic views are not equal-area, so a cartogram cannot be layered
-   on them; it builds on an equal-area (Equal Earth) base internally.
+Modeling these as independent axes is the core factoring. It turns `O(views × datasets)` hand-built
+maps into `O(views + channels + datasets)` engine pieces. The gallery is a grid of preset cells, and a
+"new map" is usually just a new dataset row or a new binding, with no new code.
 
-So the registered view axis is `equirectangular`, `azimuthal-equidistant`, `orthographic`, and
-`cartogram{noncontiguous}`. A `compatible(view, layer)` table disables cells that have no meaning
-(e.g. cartogram by point/flow) rather than rendering nonsense. (The contiguous flow-based cartogram
-is designed for but not yet implemented.)
+### Dataset × Channel × Scale (M2)
 
-## 2. Layers reduce to four primitives by datasets
+A "layer" is not one fused thing; it is three decoupled concepts, so the same dataset can be shown many
+ways and two datasets can share a map:
 
-Topic layers (flights, demographics, resources, political climate, relations) are not separate code
-paths. They reduce to four rendering **primitives**, each parameterized by a **dataset**:
+- **Dataset** — display-agnostic values + metadata (`src/app/catalog.ts`). Kinds: `region` (keyed by
+  numeric ISO), `point` (lon/lat), `pair` (flow endpoints), `grid` (vector field — M3).
+- **Channel** — how values map to a visual variable, with a **capacity** (`src/engine/channels.ts`):
+  - *single-occupancy* (a second selection replaces the first): `choropleth` (region→colour),
+    `area` (region→size, an in-place cartogram), `bubble` (region-centroid→size).
+  - *multi-occupancy* (distinguished by style): `marker` (points), `arc` (flows), `field` (M3).
+  - *structural*: `base` (land/borders, no dataset).
+- **Scale** — `{ type: linear | log | quantile | threshold | sqrt, ramp }`, defaulted per dataset
+  (log/quantile for skewed magnitudes) and overridable per binding (`src/engine/lib/scales.ts`).
 
-| Primitive | Renders | Example datasets |
-|-----------|---------|------------------|
-| `base`    | land / borders | world-atlas land + country mesh |
-| `region`  | choropleth fill by a per-region value | population, GDP, resources, regime type, any country fundamental |
-| `point`   | sized / colored markers at coordinates | airports, ports, capitals |
-| `flow`    | an arc between two geo-nodes, weighted/colored | flight routes, and trade / alliance / conflict relations |
+Consequences that fall out: **bivariate maps** (e.g. choropleth GDP + bubble population), a **skew
+fix** (magnitudes read as sqrt bubbles or log/quantile colour instead of near-monochrome), and a
+**colored cartogram** (`area` + `choropleth` compose on one path set — not exclusive).
 
-The key collapse: a flight route and a political relation are the same shape, a weighted edge between
-two geo-nodes, so both are the `flow` primitive with different data. Adding a country-fundamentals
-layer is therefore mostly a **producer + dataset** exercise (Section 5), not new engine code.
+### Why a cartogram is a channel, not a view
+
+A projection is a pure function `P: (lon,lat) -> (x,y)`. A non-contiguous cartogram scales each region
+in place by value on top of `P`. Because it only *decorates* region geometry (like a choropleth fill
+does), it is an **area encoding on the region primitive**, not a separate spatial layout — so it is the
+single-occupancy **`area` channel**, and it composes with `choropleth` (colour) on the same path set.
+Its one constraint: density-equalization assumes true areas, so `area` requires an **equal-area base**
+(`equal-earth`). `compatible(view, channel)` gates exactly that; every other channel is valid on all
+views. (Earlier drafts modeled the cartogram as a `D ∘ P` *view*; M2 reconciled it as an area channel
+so colour and area can combine.)
+
+## 2. Channels reduce to five primitives by datasets
+
+Topic content (flights, demographics, resources, relations) is not separate code paths. Every channel
+draws through one of five rendering **primitives**, each parameterized by a **dataset**:
+
+| Primitive | Renders | Channels | Example datasets |
+|-----------|---------|----------|------------------|
+| `base`          | land / borders | `base` | world-atlas land + country mesh |
+| `region`        | choropleth fill and/or in-place area scaling | `choropleth`, `area` | population, GDP, any fundamental |
+| `region-symbol` | proportional bubble at a region centroid | `bubble` | population, GDP magnitudes |
+| `point`         | sized markers at coordinates | `marker` | airports, ports, capitals |
+| `flow`          | a weighted arc between two geo-nodes | `arc` | flight routes, trade / relations |
+
+The key collapse: a flight route and a political relation are the same shape (a weighted edge), so both
+are `arc` over the `flow` primitive with different data. A colored cartogram is not a new primitive: it
+is the `region` primitive carrying both a colour binding and an area binding.
 
 ## 3. One render backend, one layer contract
 
@@ -66,8 +76,11 @@ polygons), and per-feature SVG DOM gives free hover/click/tooltip/transition. Gl
 (orthographic, azimuthal) add drag-to-rotate and wheel-zoom by mutating the projection and
 repainting.
 
-A view contributes a `Projector`; a layer contributes a `drawSVG` that projects its GeoJSON through
-that projector:
+A view contributes a `Projector`; a primitive contributes a `drawSVG` that projects its GeoJSON
+through that projector. The app resolves channel bindings into `ResolvedLayer`s (loading data, picking
+scales, **merging a `choropleth` + `area` binding into one region layer**) and hands them to
+`createMap`; it enforces `compatible(view, channel)` at that point, so the renderer just draws what it
+is given.
 
 ```ts
 interface Projector {
@@ -78,8 +91,8 @@ interface Projector {
 
 interface View {
   id: ViewId
-  kind: 'projection' | 'cartogram'
-  cartogramKind?: 'noncontiguous'
+  kind: 'projection'
+  equalArea?: boolean       // required by the `area` channel
   rotatable?: boolean
   build(width: number, height: number): Projector
 }
@@ -89,14 +102,14 @@ interface PrimitiveRenderer {
 }
 ```
 
-**Registering a layer against the active view** is the one subtle part:
+**Rendering per primitive**, the subtle parts:
 
-- *Projection view*: project each vertex through `P`. Densify great-circle `flow` lines first so they
-  curve correctly; on globe-like projections, drop vertices where `project` returns `null` (back
-  hemisphere, `clipAngle(90)`).
-- *Cartogram view*: the `region` primitive owns the distortion because it owns the values. It reads
-  `cartogramKind` and lays areas out as non-contiguous scaled shapes (each region scaled in place
-  around its centroid by value, over an equal-area base).
+- *Great-circle flows*: densify `flow` LineStrings first so they curve correctly; on globe-like
+  projections geoPath clips back-hemisphere arcs for free.
+- *Point-like marks* (`point`, `region-symbol`): d3 does not clip points, so a shared far-side test
+  (`lib/clip.ts`) drops marks on a globe's hidden hemisphere.
+- *Area encoding*: the `region` primitive scales each feature around its **screen-space centroid**
+  (`path.centroid`) by `sqrt(value / max)` when an `area` binding is present, on an equal-area base.
 
 ## 4. Engine, app boundary
 
@@ -141,16 +154,17 @@ Baking a dataset onto our CDN is redistribution. So each dataset declares a `Dat
 
 ```ts
 type DataSource =
-  | { mode: 'baked';  url: string }                              // open license, re-hosted snapshot
+  | { mode: 'baked';  snapshot: string }                         // open license, re-hosted snapshot (basename)
   | { mode: 'client'; url: string; join: JoinSpec }              // restricted, runtime fetch, not re-hosted
 ```
 
-- `baked`: open data (public domain, CC0/CC-BY, World Bank open, OpenFlights ODbL), normalized and re-hosted.
+- `baked`: open data (public domain, CC0/CC-BY, World Bank open, OpenFlights ODbL), normalized and re-hosted. The `snapshot` is a bare filename; `data-loaders.ts` resolves it against the CDN base, so the pure `catalog.ts` never encodes a host.
 - `client`: redistribution-restricted but CORS-enabled. The browser fetches from the licensor at runtime; we never host a copy. Display and attribution terms still apply, and no secret keys client-side.
 - **Worker-proxy** (escape hatch): when a source is no-CORS or keyed, a Cloudflare Pages Function injects the key / adds CORS, forwarding without storing.
 
-`loadValues(dataset)` branches on the mode; downstream layer code is identical. Required
-**attribution** is rendered for every active dataset.
+Loaders in `data-loaders.ts` branch on the mode; downstream primitive code is identical. Required
+**attribution** is rendered for every active dataset, and `docs/DATA_SOURCES.md` is generated from the
+catalog (`pnpm gen-docs`) so the licence ledger never drifts.
 
 ### Wired sources (scaffold)
 
@@ -166,17 +180,21 @@ largely proprietary (AIS).
 
 ## 6. How to add a map
 
-- **A new projection**: add a `View` module under `engine/views/`, register it, and set its
-  compatibility. Every existing layer works under it for free.
-- **A new topic layer**: usually no engine change. Add a `DataSource` to the app's `datasets.ts`
-  (plus crosswalk entries) and reference it from a `region`/`point`/`flow` layer spec or a preset.
-- **A genuinely new render shape**: add a primitive under `engine/primitives/` with its `drawSVG`.
-  This should be rare; the four primitives cover the planned roadmap.
+- **A new projection**: add a `View` module under `engine/views/`, register it (set `equalArea` if it
+  is). Every channel works under it for free, except those gated by `compatible(view, channel)`.
+- **A new topic dataset**: usually no engine change. Add a `Dataset` row to `app/catalog.ts` (plus
+  crosswalk entries and a producer that writes its snapshot); bind it from a preset. A region dataset
+  is instantly available as choropleth, area, and bubble.
+- **A genuinely new display mode**: add a `Channel` row (`engine/channels.ts`) and, if it needs a new
+  draw routine, a primitive under `engine/primitives/`. This is rare; the next one is M3's `field`.
 
 ## 7. Toolchain & delivery
 
-- **pnpm on host**: a global hard-linked store dedupes dependencies across the whole `portfolio/`
-  folder and is monorepo-ready. No Docker (no cross-project dedup; Windows HMR friction).
+- **Docker-first dev**: `docker compose up` runs Vite in `node:24-alpine` on 5173; `docker compose
+  down` is a clean kill switch (a native orphan dev-server is hard to see/kill on Windows). Bind-mount
+  file events propagate without polling; `node_modules` is a named volume so container Linux deps stay
+  isolated from the host. Native `pnpm dev` still works. **pnpm** uses a global hard-linked store that
+  dedupes dependencies across the whole local workspace.
 - **Vite + TypeScript (strict) + ESLint**: multi-page (`index.html` gallery + `compose.html`
   composer), relative `base` so the build serves from any host root.
 - **Cloudflare Pages + custom domain**: `pnpm build` produces `dist/`; a scheduled rebuild refreshes

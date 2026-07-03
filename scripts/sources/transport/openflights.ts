@@ -2,7 +2,7 @@
 // flight routes aggregated by airport pair (value = number of airlines flying the pair).
 // All unique pairs are baked; render-time minCount tunes density (see src/app/layers.ts).
 
-import { getText, parseCsvLine, nullable } from './_shared'
+import { getText, parseCsvLine, nullable } from '../_shared'
 
 const OF_AIRPORTS = 'https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat'
 const OF_ROUTES = 'https://raw.githubusercontent.com/jpatokal/openflights/master/data/routes.dat'

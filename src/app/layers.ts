@@ -1,158 +1,172 @@
-// App layer registry. Each layer is a primitive + (optionally) a dataset; build()
-// resolves geometry + values into the engine's ResolvedLayer. Adding a topic layer is
-// usually just a new entry here pointing at a new dataset - no engine change.
+// Binding resolver: turn the composer's channel bindings into the engine's ResolvedLayers.
+// A binding is a dataset placed in a channel (with an optional scale override); this module
+// loads the data and shapes each binding for its primitive. Two subtleties:
+//   - a choropleth binding and an area binding on region geometry MERGE into ONE region
+//     layer (fill + cartogram transform on the same path set) so a colored cartogram works;
+//   - a binding whose snapshot is unreachable is dropped (its key returned in `failed`) so
+//     the rest of the map still renders and the composer can flag it.
+// Draw order is fixed by channel: base, region, arcs, bubbles, markers (markers on top).
 
-import { loadCountries } from '../engine'
-import type { Primitive, ResolvedLayer } from '../engine'
-import {
-  DATASETS,
-  loadRegionValues,
-  loadPointData,
-  loadFlowData,
-} from './datasets'
-import { WDI_INDICATORS } from './indicators'
+import { loadCountries, getChannel } from '../engine'
+import type { ChannelId, ResolvedLayer, ScaleSpec, ScaleType } from '../engine'
+import { DATASETS } from './catalog'
+import type { Dataset } from './catalog'
+import { loadRegionValues, loadPointData, loadPairData } from './data-loaders'
 
-export interface LayerDef {
-  id: string
-  label: string
-  primitive: Primitive
-  datasetId?: string
-  build(): Promise<ResolvedLayer>
+export interface Binding {
+  channel: ChannelId
+  dataset: string
+  scale?: ScaleType
 }
 
-// Flight-route density knob: keep only routes flown by at least this many airlines
-// (the baked `value`). 1 shows all ~18.8k pairs; raise it to thin the network. This is
-// the single place to tune it (a UI control can bind here later).
+// Flight-route density knob: keep only routes flown by at least this many airlines.
 export const FLIGHT_MIN_COUNT = 2
 
-// Region-choropleth layer factory: any region dataset becomes a layer by id + ramp. The
-// layer id is `region-<datasetId>`, so presets referencing e.g. `region-population` are
-// stable. Reuses loadCountries + loadRegionValues; no per-indicator code.
-function regionLayer(datasetId: string, ramp: string): LayerDef {
-  const meta = DATASETS[datasetId]!
+const BASE_ATTRIBUTION = 'Basemap: Natural Earth via world-atlas (public domain)'
+
+/** Stable key for a binding, used to flag an unavailable dataset back to the composer. */
+export function bindingKey(b: Binding): string {
+  return b.channel === 'base' ? 'base' : `${b.channel}:${b.dataset}`
+}
+
+function scaleSpecFor(ds: Dataset, channel: ChannelId, override?: ScaleType): ScaleSpec {
+  const type = override ?? ds.defaultScale ?? getChannel(channel).defaultScaleType
+  return { type, ramp: ds.defaultRamp }
+}
+
+async function resolveBase(): Promise<ResolvedLayer> {
+  const features = await loadCountries()
   return {
-    id: `region-${datasetId}`,
-    label: `${meta.label} (choropleth)`,
-    primitive: 'region',
-    datasetId,
-    async build() {
-      const [features, region] = await Promise.all([
-        loadCountries(),
-        loadRegionValues(meta),
-      ])
-      return {
-        id: `region-${datasetId}`,
-        primitive: 'region',
-        features,
-        values: region.values,
-        valueDomain: region.domain,
-        style: { ramp, stroke: 'rgba(0,0,0,0.25)', strokeWidth: 0.4 },
-      }
-    },
+    id: 'base',
+    primitive: 'base',
+    features,
+    style: { fill: '#161b23', stroke: '#2b323d', strokeWidth: 0.5 },
   }
 }
 
-// One region layer per World Bank indicator, generated from the shared catalog.
-const WDI_LAYERS: Record<string, LayerDef> = Object.fromEntries(
-  WDI_INDICATORS.map((ind) => {
-    const layer = regionLayer(ind.id, ind.ramp)
-    return [layer.id, layer]
-  }),
-)
-
-export const LAYERS: Record<string, LayerDef> = {
-  'base-land': {
-    id: 'base-land',
-    label: 'Land & borders',
-    primitive: 'base',
-    async build() {
-      const features = await loadCountries()
-      return {
-        id: 'base-land',
-        primitive: 'base',
-        features,
-        style: { fill: '#161b23', stroke: '#2b323d', strokeWidth: 0.5 },
-      }
-    },
-  },
-
-  ...WDI_LAYERS,
-
-  'point-airports': {
-    id: 'point-airports',
-    label: 'Airports',
-    primitive: 'point',
-    datasetId: 'airports',
-    async build() {
-      const d = await loadPointData(DATASETS['airports']!)
-      return {
-        id: 'point-airports',
-        primitive: 'point',
-        features: d.features,
-        values: d.values,
-        valueDomain: d.domain,
-        style: { fill: '#ffcc44', radiusRange: [1.5, 7] },
-      }
-    },
-  },
-
-  'flow-flights': {
-    id: 'flow-flights',
-    label: 'Flight routes',
-    primitive: 'flow',
-    datasetId: 'flights',
-    async build() {
-      const d = await loadFlowData(DATASETS['flights']!)
-      return {
-        id: 'flow-flights',
-        primitive: 'flow',
-        features: d.features,
-        values: d.values,
-        valueDomain: d.domain,
-        style: {
-          arcColor: 'rgba(255,180,120,0.55)',
-          strokeWidth: 0.5,
-          opacity: 0.5,
-          minValue: FLIGHT_MIN_COUNT,
-        },
-      }
-    },
-  },
-
-  // point-ports and flow-shipping are not wired (see datasets.ts).
+// Merge the (single) choropleth binding (colour) and the (single) area binding (cartogram)
+// on region geometry into one region layer, so both encode the same path set.
+async function resolveRegion(choro?: Binding, area?: Binding): Promise<ResolvedLayer | null> {
+  if (!choro && !area) return null
+  const features = await loadCountries()
+  const layer: {
+    values?: ResolvedLayer['values']
+    scale?: ScaleSpec
+    valueDomain?: [number, number]
+    area?: ResolvedLayer['area']
+  } = {}
+  if (choro) {
+    const ds = DATASETS[choro.dataset]!
+    const rv = await loadRegionValues(ds)
+    layer.values = rv.values
+    layer.valueDomain = rv.domain
+    layer.scale = scaleSpecFor(ds, 'choropleth', choro.scale)
+  }
+  if (area) {
+    const ds = DATASETS[area.dataset]!
+    const rv = await loadRegionValues(ds)
+    layer.area = { values: rv.values, domain: rv.domain }
+  }
+  return {
+    id: `region-${choro?.dataset ?? 'x'}-${area?.dataset ?? 'x'}`,
+    primitive: 'region',
+    features,
+    style: { stroke: 'rgba(0,0,0,0.25)', strokeWidth: 0.4 },
+    ...layer,
+  }
 }
 
-export const LAYER_LIST: LayerDef[] = Object.values(LAYERS)
+async function resolveBubble(b: Binding): Promise<ResolvedLayer> {
+  const ds = DATASETS[b.dataset]!
+  const [features, rv] = await Promise.all([loadCountries(), loadRegionValues(ds)])
+  return {
+    id: `bubble-${ds.id}`,
+    primitive: 'region-symbol',
+    features,
+    values: rv.values,
+    valueDomain: rv.domain,
+    style: { fill: 'rgba(255,140,60,0.55)', stroke: 'rgba(20,10,0,0.6)', radiusRange: [2, 26] },
+  }
+}
+
+async function resolveMarker(b: Binding): Promise<ResolvedLayer> {
+  const ds = DATASETS[b.dataset]!
+  const d = await loadPointData(ds)
+  return {
+    id: `marker-${ds.id}`,
+    primitive: 'point',
+    features: d.features,
+    values: d.values,
+    valueDomain: d.domain,
+    style: { fill: '#ffcc44', radiusRange: [1.5, 7] },
+  }
+}
+
+async function resolveArc(b: Binding): Promise<ResolvedLayer> {
+  const ds = DATASETS[b.dataset]!
+  const d = await loadPairData(ds)
+  return {
+    id: `arc-${ds.id}`,
+    primitive: 'flow',
+    features: d.features,
+    values: d.values,
+    valueDomain: d.domain,
+    style: { arcColor: 'rgba(255,180,120,0.55)', strokeWidth: 0.5, opacity: 0.5, minValue: FLIGHT_MIN_COUNT },
+  }
+}
+
+interface Task {
+  keys: string[] // binding keys this task covers (all flagged if it fails)
+  run: () => Promise<ResolvedLayer | null>
+}
 
 /**
- * Resolve a set of layer ids into engine ResolvedLayers (in the given order). A layer
- * whose dataset is unreachable (snapshot not yet built, source down) is dropped with a
- * warning rather than failing the whole compose, so the rest of the map still renders.
- * The returned ids are a subset of the input; the caller can diff to flag what is missing.
+ * Resolve bindings into engine ResolvedLayers (in fixed draw order). Each task loads
+ * independently; a task whose dataset is unreachable is dropped and its binding keys are
+ * returned in `failed`, so the rest of the map still renders.
  */
-export async function buildLayers(ids: string[]): Promise<ResolvedLayer[]> {
-  const defs = ids.map((id) => LAYERS[id]).filter((d): d is LayerDef => d != null)
-  const settled = await Promise.allSettled(defs.map((d) => d.build()))
-  const out: ResolvedLayer[] = []
+export async function buildLayers(
+  bindings: Binding[],
+): Promise<{ layers: ResolvedLayer[]; failed: Set<string> }> {
+  const choro = bindings.find((b) => b.channel === 'choropleth')
+  const area = bindings.find((b) => b.channel === 'area')
+
+  const tasks: Task[] = []
+  if (bindings.some((b) => b.channel === 'base')) tasks.push({ keys: ['base'], run: resolveBase })
+  if (choro || area) {
+    const keys = [choro, area].filter((b): b is Binding => b != null).map(bindingKey)
+    tasks.push({ keys, run: () => resolveRegion(choro, area) })
+  }
+  for (const b of bindings.filter((b) => b.channel === 'arc')) tasks.push({ keys: [bindingKey(b)], run: () => resolveArc(b) })
+  for (const b of bindings.filter((b) => b.channel === 'bubble')) tasks.push({ keys: [bindingKey(b)], run: () => resolveBubble(b) })
+  for (const b of bindings.filter((b) => b.channel === 'marker')) tasks.push({ keys: [bindingKey(b)], run: () => resolveMarker(b) })
+
+  const settled = await Promise.allSettled(tasks.map((t) => t.run()))
+  const layers: ResolvedLayer[] = []
+  const failed = new Set<string>()
   settled.forEach((r, i) => {
-    if (r.status === 'fulfilled') out.push(r.value)
+    if (r.status === 'fulfilled' && r.value) layers.push(r.value)
     else {
-      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason)
-      console.warn(`layer ${defs[i]!.id} unavailable: ${reason}`)
+      for (const k of tasks[i]!.keys) failed.add(k)
+      if (r.status === 'rejected') {
+        const reason = r.reason instanceof Error ? r.reason.message : String(r.reason)
+        console.warn(`binding ${tasks[i]!.keys.join(',')} unavailable: ${reason}`)
+      }
     }
   })
-  return out
+  return { layers, failed }
 }
 
-/** Attribution strings for the datasets backing the active layers. */
-export function attributionsFor(ids: string[]): string[] {
+/** Attribution strings for the datasets backing the active bindings (base included). */
+export function attributionsFor(bindings: Binding[]): string[] {
   const out = new Set<string>()
-  for (const id of ids) {
-    const def = LAYERS[id]
-    if (def?.datasetId) {
-      const ds = DATASETS[def.datasetId]
-      if (ds) out.add(ds.attribution)
+  for (const b of bindings) {
+    if (b.channel === 'base') {
+      out.add(BASE_ATTRIBUTION)
+      continue
     }
+    const ds = DATASETS[b.dataset]
+    if (ds) out.add(ds.attribution)
   }
   return [...out]
 }

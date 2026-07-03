@@ -1,6 +1,7 @@
 // The engine's one entry point. createMap mounts a map into a container as an <svg>
-// rendered with d3-geo. Layers are drawn through their primitive renderers;
-// incompatible (view, primitive) cells are skipped.
+// rendered with d3-geo. Layers are drawn through their primitive renderers, in order. The
+// app enforces (view × channel) compatibility when it resolves bindings, so the renderer
+// draws whatever layers it is handed.
 
 import { select } from 'd3-selection'
 import { drag } from 'd3-drag'
@@ -52,7 +53,6 @@ function attachRotate(svg: SvgSelection, projection: GeoProjection, onChange: ()
 }
 import { getView } from './views'
 import { getPrimitive } from './primitives'
-import { compatible } from './compatible'
 import { SPHERE } from './views/_svgProjector'
 
 const sphere = SPHERE as unknown as GeoGeometryObjects
@@ -114,7 +114,6 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
 
     const layerGroups: Array<{ group: SvgGroup; layer: ResolvedLayer }> = []
     for (const layer of layers) {
-      if (!compatible(view, layer.primitive)) continue
       const group = root.append('g').attr('class', `layer-${layer.primitive} layer-${layer.id}`)
       layerGroups.push({ group, layer })
     }
@@ -162,7 +161,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
         paint()
       })
     } else {
-      // Flat/cartogram views: pan + zoom by transforming the root group.
+      // Flat views: pan + zoom by transforming the root group.
       const zoomBehavior = zoom<SVGSVGElement, unknown>()
         .scaleExtent([0.6, 12])
         .on('zoom', (event) => {

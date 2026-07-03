@@ -2,7 +2,7 @@
 // Run: `pnpm build-data` (incremental) or `pnpm refresh-data` (--force refetch).
 //
 //   wdi-<id>.json : World Bank WDI indicators (latest per country), joined to the ISO
-//                   numeric ids world-atlas uses. The catalog is src/app/indicators.ts.
+//                   numeric ids world-atlas uses. The catalog is src/app/catalog.ts.
 //   airports.json : OpenFlights airports (id/name/lon/lat + route-degree as value).
 //   flights.json  : OpenFlights routes, aggregated by airport pair (value = airline
 //                   count). All pairs baked; density is a render-time minCount.
@@ -10,14 +10,14 @@
 // Each dataset is independent: a source that is down is skipped, keeping the existing
 // snapshot rather than failing the whole build. Snapshots are a gitignored build artifact.
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { WDI_INDICATORS } from '../src/app/indicators'
+import { WDI_INDICATORS } from '../src/app/catalog'
 import { loadA3ToNum, sleep } from './sources/_shared'
-import { buildWorldBankIndicator } from './sources/worldbank'
-import { buildAirportsAndFlights } from './sources/openflights'
+import { buildWorldBankIndicator } from './sources/reference/worldbank'
+import { buildAirportsAndFlights } from './sources/transport/openflights'
 
 // Incremental by default: skip a dataset whose snapshot already exists. Pass --force
 // (via `pnpm refresh-data`) to re-fetch. A fresh checkout / CI still produces data once.
@@ -90,11 +90,36 @@ async function buildFlights(): Promise<void> {
   }
 }
 
+// Per-snapshot weight-budget report. Today's snapshots are small (WDI ~2-5K, airports/
+// flights <1M) and lazy-loaded, so this is a guardrail, not a gate - its real job is to keep
+// M3's dense field (wind/current streamline) and route snapshots honest. Warns past budget.
+const BUDGET_BYTES = 900 * 1024
+
+function reportWeights(): void {
+  if (!existsSync(OUT)) return
+  const files = readdirSync(OUT)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => ({ name: f, bytes: statSync(resolve(OUT, f)).size }))
+    .sort((a, b) => b.bytes - a.bytes)
+  if (files.length === 0) return
+  const total = files.reduce((s, f) => s + f.bytes, 0)
+  const kb = (b: number): string => `${(b / 1024).toFixed(1)}K`
+  console.log(`\nWeight budget (per snapshot ≤ ${kb(BUDGET_BYTES)}):`)
+  for (const f of files.slice(0, 5)) {
+    const flag = f.bytes > BUDGET_BYTES ? '  ⚠ over budget' : ''
+    console.log(`  ${f.name.padEnd(28)} ${kb(f.bytes).padStart(8)}${flag}`)
+  }
+  if (files.length > 5) console.log(`  … ${files.length - 5} more`)
+  const over = files.filter((f) => f.bytes > BUDGET_BYTES)
+  console.log(`  ${files.length} snapshots, ${kb(total)} total${over.length ? `, ${over.length} over budget` : ''}`)
+}
+
 async function main(): Promise<void> {
   mkdirSync(OUT, { recursive: true })
   console.log(`Building datasets → ${OUT}${FORCE ? ' (--force)' : ''}`)
   await buildWdi()
   await buildFlights()
+  reportWeights()
   console.log('Done.')
 }
 

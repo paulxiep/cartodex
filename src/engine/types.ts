@@ -1,24 +1,35 @@
-// Engine type contracts. This module defines the two axes (View x Layer), the
-// projector abstraction shared by all views, and the resolved-layer shape the app
-// hands to the renderer. The engine never fetches a topic dataset itself - the app
-// resolves data and passes it in - which keeps `engine/` publishable and dataset-free.
+// Engine type contracts. Cartodex models a map on two axes: a View (spatial layout) and
+// a set of channel bindings (a dataset drawn through a display mode with a scale). This
+// module defines the View/Projector abstraction, the display Channels and their capacity,
+// the value→visual Scale spec, and the resolved-layer shape the app hands the renderer.
+// The engine never fetches a topic dataset itself - the app resolves data and passes it
+// in - which keeps `engine/` publishable and dataset-free.
 
 import type { GeoPath, GeoProjection } from 'd3-geo'
 import type { Selection } from 'd3-selection'
 import type { FeatureCollection } from 'geojson'
+import type { Primitive, ScaleSpec } from './model'
 
-/** The four layer rendering primitives. Topic content is data over these, not new code. */
-export type Primitive = 'base' | 'region' | 'point' | 'flow'
+// The dependency-free core vocabulary lives in model.ts (so pure consumers - the app catalog
+// and the Node producer - share it without pulling the DOM-bound engine in). Re-exported here
+// so the barrel and app import surface is unchanged.
+export type {
+  Primitive,
+  ChannelId,
+  ChannelCapacity,
+  Channel,
+  DatasetKind,
+  ScaleType,
+  ScaleSpec,
+} from './model'
 
-export type ViewKind = 'projection' | 'cartogram'
-
-export type CartogramKind = 'noncontiguous'
+export type ViewKind = 'projection'
 
 export type ViewId =
   | 'equirectangular'
+  | 'equal-earth'
   | 'azimuthal-equidistant'
   | 'orthographic'
-  | 'cartogram-noncontiguous'
 
 /**
  * A Projector turns a lon/lat into screen coordinates (or `null` when the point is
@@ -36,8 +47,9 @@ export interface View {
   readonly id: ViewId
   readonly label: string
   readonly kind: ViewKind
-  /** Set for `kind: 'cartogram'` - tells the `region` primitive how to lay out areas. */
-  readonly cartogramKind?: CartogramKind
+  /** Equal-area base: required for the `area` channel (density-equalization assumes true
+   *  areas). Only `equal-earth` sets this today. */
+  readonly equalArea?: boolean
   /** Globe-like views: drag rotates the projection center (re-centers), wheel zooms. */
   readonly rotatable?: boolean
   /** Draw a marker at the projection center (helps read azimuthal / polar maps). */
@@ -51,9 +63,7 @@ export interface LayerStyle {
   stroke?: string
   strokeWidth?: number
   opacity?: number
-  /** region: choropleth color ramp name (d3-scale-chromatic interpolator key). */
-  ramp?: string
-  /** point: marker radius range [min, max] in px, mapped from value. */
+  /** point/bubble: marker radius range [min, max] in px, mapped from value via sqrt. */
   radiusRange?: [number, number]
   /** flow: arc color. */
   arcColor?: string
@@ -63,9 +73,12 @@ export interface LayerStyle {
 
 /**
  * A layer with its geometry + values already resolved by the app. `features` holds
- * GeoJSON appropriate to the primitive (areas for base/region, points for point,
- * LineStrings for flow). `values` maps a feature id to a numeric value for
- * choropleth / sizing / weighting; `valueDomain` is the precomputed [min,max].
+ * GeoJSON appropriate to the primitive (areas for base/region, points for point/bubble,
+ * LineStrings for flow). `values` maps a feature id to the value that drives the layer's
+ * primary channel (color for region/choropleth, size for point/bubble, width for flow);
+ * `scale` says how. A region layer may also carry an `area` binding (a second dataset that
+ * scales each region around its centroid) so a colored cartogram composes fill + area on
+ * one path set.
  */
 export interface ResolvedLayer {
   readonly id: string
@@ -73,7 +86,12 @@ export interface ResolvedLayer {
   readonly features: FeatureCollection
   readonly style: LayerStyle
   readonly values?: Map<string | number, number>
+  /** how `values` map to the visual channel (color scales need it; sqrt sizing uses `valueDomain`). */
+  readonly scale?: ScaleSpec
+  /** precomputed [min,max] of `values`, for sqrt sizing (point/bubble). */
   readonly valueDomain?: [number, number]
+  /** region only: optional area (sqrt-scaled) transform driven by a second dataset. */
+  readonly area?: { values: Map<string | number, number>; domain: [number, number] }
 }
 
 /** Context handed to every primitive renderer for the active view + size. */
@@ -88,8 +106,8 @@ export interface RenderContext {
 export type SvgGroup = Selection<SVGGElement, unknown, null, undefined>
 
 /**
- * A primitive renderer draws one of the four primitives into an SVG group for the
- * active view. Layers stay backend-agnostic GeoJSON; the renderer projects them.
+ * A primitive renderer draws one of the primitives into an SVG group for the active view.
+ * Layers stay backend-agnostic GeoJSON; the renderer projects them.
  */
 export interface PrimitiveRenderer {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext): void

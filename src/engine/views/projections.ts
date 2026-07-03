@@ -1,8 +1,9 @@
-// The three pure-projection d3-svg views: equirectangular (flat reference),
-// azimuthal-equidistant (the polar map), and orthographic (a 2.5D globe in SVG).
-// Each fits the world to the container and exposes a Projector via svgProjector.
+// The pure-projection d3-svg views: equirectangular (flat reference), equal-earth (an
+// equal-area flat base - the one the `area`/cartogram channel needs), azimuthal-equidistant
+// (the polar map), and orthographic (a 2.5D globe in SVG). Each fits the world to the
+// container and exposes a Projector via svgProjector.
 
-import { geoEquirectangular, geoAzimuthalEquidistant, geoOrthographic } from 'd3-geo'
+import { geoEquirectangular, geoEqualEarth, geoAzimuthalEquidistant, geoOrthographic } from 'd3-geo'
 import type { GeoGeometryObjects } from 'd3-geo'
 import type { View } from '../types'
 import { svgProjector, SPHERE } from './_svgProjector'
@@ -15,6 +16,17 @@ export const equirectangular: View = {
   kind: 'projection',
   build(width, height) {
     const projection = geoEquirectangular().fitSize([width, height], sphere)
+    return svgProjector(projection)
+  },
+}
+
+export const equalEarth: View = {
+  id: 'equal-earth',
+  label: 'Equal Earth',
+  kind: 'projection',
+  equalArea: true, // density-preserving base; the `area` cartogram channel builds on it
+  build(width, height) {
+    const projection = geoEqualEarth().fitSize([width, height], sphere)
     return svgProjector(projection)
   },
 }
