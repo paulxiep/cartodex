@@ -4,7 +4,7 @@
 > by hand; edit the catalog and regenerate. Every baked snapshot is an open-licensed source,
 > normalised and re-hosted; the in-app attribution string carries the same credit.
 
-31 datasets across 5 domains.
+46 datasets across 7 domains.
 
 ### Demographics
 
@@ -61,4 +61,29 @@
 |---|---|---|---|
 | Airports | `point` | OpenFlights | Open Database License |
 | Flight routes | `pair` | OpenFlights | Open Database License |
+
+### Maritime
+
+| Dataset | Kind | Provider | Licence |
+|---|---|---|---|
+| Seaports (all vessels) | `point` | NGA World Port Index + IMF PortWatch | Public domain (WPI) · IMF PortWatch (attribution) |
+| Container | `point` | NGA World Port Index + IMF PortWatch | Public domain (WPI) · IMF PortWatch (attribution) |
+| Tanker | `point` | NGA World Port Index + IMF PortWatch | Public domain (WPI) · IMF PortWatch (attribution) |
+| Dry bulk | `point` | NGA World Port Index + IMF PortWatch | Public domain (WPI) · IMF PortWatch (attribution) |
+| Shipping lanes (network) | `lines` | newzealandpaul/Shipping-Lanes | CC BY-SA 4.0 |
+| All traffic | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Cargo | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Commercial | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Oil & gas | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Non-cargo | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Passenger | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Leisure | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Fishing | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+
+### Environment
+
+| Dataset | Kind | Provider | Licence |
+|---|---|---|---|
+| Surface winds | `grid` | FNMOC via NOAA CoastWatch ERDDAP | Public domain (US Gov) |
+| Ocean currents | `grid` | Aviso via NOAA CoastWatch ERDDAP | Aviso+ altimetry (attribution) |
 

@@ -131,7 +131,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
 }
 .channel-slot select:disabled { cursor: not-allowed; }
 
-.channel-multi { display: flex; flex-direction: column; gap: 2px; max-height: 168px; overflow-y: auto; }
+.channel-multi { display: flex; flex-direction: column; gap: 2px; max-height: 300px; overflow-y: auto; }
 .channel-row {
   display: flex;
   align-items: center;
@@ -173,3 +173,44 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
   .composer { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .panel { border-right: none; border-bottom: 1px solid var(--line); }
 }
+
+/* ── Version badge (links to the changelog) ────────────────── */
+.version {
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: middle;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  letter-spacing: 0;
+}
+.version:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── Changelog page ────────────────────────────────────────── */
+.changelog-page { max-width: 760px; margin: 0 auto; padding: 28px 24px 64px; }
+.cl-nav { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
+.changelog h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -0.02em; }
+.changelog h2 {
+  font-size: 20px;
+  margin: 32px 0 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.changelog h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin: 18px 0 6px;
+}
+.changelog p { color: var(--muted); margin: 8px 0; }
+.changelog blockquote {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+}
+.changelog ul { margin: 6px 0 14px; padding-left: 20px; }
+.changelog li { margin: 4px 0; color: var(--ink); }

@@ -6,6 +6,7 @@
 // primitive is ignorant of "cartogram mode": it only sees optional `values`+`scale` (fill)
 // and optional `area` (transform); the app decides which bindings are present.
 
+import { quantile } from 'd3-array'
 import type { Feature } from 'geojson'
 import type { GeoPath } from 'd3-geo'
 import type { PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
@@ -37,21 +38,26 @@ function fillFn(layer: ResolvedLayer): (f: Feature) => string {
   }
 }
 
-// Cartogram transform per feature: scale in place around the (screen-space) centroid by
-// sqrt(value / max), so encoded area is proportional to value. Returns null (no transform)
-// for regions without an area value or an undefined centroid.
+// Cartogram transform per feature: scale in place around the (screen-space) centroid so encoded
+// area tracks value. Normalizing by the raw max makes a single extreme region (e.g. a dense
+// city-state under population density) shrink everyone else to a dot, so instead the reference is
+// a robust high quantile (p90) - typical regions land near 1x - and the scale is clamped so
+// outliers cap out instead of dominating. Returns null for regions without an area value.
+const AREA_CLAMP = 2.5
+
 function areaTransform(
   layer: ResolvedLayer,
   path: GeoPath,
 ): ((f: Feature) => string | null) | null {
   const area = layer.area
   if (!area) return null
-  const max = area.domain[1]
-  if (!(max > 0)) return null
+  const positives = [...area.values.values()].filter((v) => v > 0).sort((a, b) => a - b)
+  const ref = quantile(positives, 0.9)
+  if (!ref || !(ref > 0)) return null
   return (f) => {
     const v = f.id == null ? undefined : area.values.get(f.id)
     if (v == null) return null
-    const k = Math.sqrt(Math.max(v, 0) / max)
+    const k = Math.min(AREA_CLAMP, Math.sqrt(Math.max(v, 0) / ref))
     const [cx, cy] = path.centroid(f)
     if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null
     return `translate(${cx},${cy}) scale(${k}) translate(${-cx},${-cy})`

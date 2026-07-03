@@ -9,9 +9,11 @@
 
 import { loadCountries, getChannel } from '../engine'
 import type { ChannelId, ResolvedLayer, ScaleSpec, ScaleType } from '../engine'
-import { DATASETS } from './catalog'
+import { DATASETS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
-import { loadRegionValues, loadPointData, loadPairData } from './data-loaders'
+import { topmostSelected } from './taxonomy'
+import type { Taxonomy } from './taxonomy'
+import { loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged } from './data-loaders'
 
 export interface Binding {
   channel: ChannelId
@@ -39,8 +41,9 @@ async function resolveBase(): Promise<ResolvedLayer> {
   return {
     id: 'base',
     primitive: 'base',
+    // Land clearly lighter than water (sphere #0d1826), borders legible as a bright hairline.
     features,
-    style: { fill: '#161b23', stroke: '#2b323d', strokeWidth: 0.5 },
+    style: { fill: '#2b3644', stroke: 'rgba(165,185,210,0.5)', strokeWidth: 0.5 },
   }
 }
 
@@ -89,17 +92,32 @@ async function resolveBubble(b: Binding): Promise<ResolvedLayer> {
   }
 }
 
-async function resolveMarker(b: Binding): Promise<ResolvedLayer> {
-  const ds = DATASETS[b.dataset]!
-  const d = await loadPointData(ds)
+// Colour by domain: air (airports/flights) stays yellow, sea (seaports/lanes) is one blue tone
+// so the two systems never blur together and any sea sub-layers merge cleanly.
+const AIR_YELLOW = '#ffcc44'
+const SEA_BLUE = 'rgba(96,168,235,0.85)'
+
+// Marker datasets that share one snapshot (seaports by type) merge into ONE layer sized by the
+// summed union of selected fields - markers placed once, never stacked duplicates. Grouped by
+// snapshot upstream, so airports and seaports stay distinct (and keep their air/sea colour).
+async function resolveMarkers(bindings: Binding[]): Promise<ResolvedLayer | null> {
+  const datasets = topmostDatasets(bindings, PORT_TAXONOMY)
+  if (!datasets.length) return null
+  const d = await loadPointsMerged(datasets)
+  const sea = datasets[0]!.domain === 'maritime'
   return {
-    id: `marker-${ds.id}`,
+    id: `marker-${snapshotKey(datasets[0]!)}`,
     primitive: 'point',
     features: d.features,
     values: d.values,
     valueDomain: d.domain,
-    style: { fill: '#ffcc44', radiusRange: [1.5, 7] },
+    style: { fill: sea ? SEA_BLUE : AIR_YELLOW, radiusRange: [1.5, 7] },
   }
+}
+
+/** Key that groups marker datasets drawn from the same snapshot. */
+function snapshotKey(ds: Dataset): string {
+  return ds.source.mode === 'baked' ? ds.source.snapshot : ds.id
 }
 
 async function resolveArc(b: Binding): Promise<ResolvedLayer> {
@@ -112,6 +130,55 @@ async function resolveArc(b: Binding): Promise<ResolvedLayer> {
     values: d.values,
     valueDomain: d.domain,
     style: { arcColor: 'rgba(255,180,120,0.55)', strokeWidth: 0.5, opacity: 0.5, minValue: FLIGHT_MIN_COUNT },
+  }
+}
+
+// Shipping lanes: the real lane network. Unweighted, it is a subtle background context; a
+// traffic-weighted variant (cargo, passenger, ...) renders each lane's width by real AIS traffic
+// via the field primitive. All lane layers share one sea-blue tone (the hierarchy in the composer,
+// not colour, distinguishes them), so overlapping selections merge instead of clashing.
+// The datasets that actually drive a merged layer: the TOP-MOST selected nodes in the taxonomy.
+// A selected parent subsumes its children (Seaports total wins over its cargo subtypes; All
+// traffic over its classes), so volume is counted once at the level the user picked.
+function topmostDatasets(bindings: Binding[], tax: Taxonomy): Dataset[] {
+  const top = new Set(topmostSelected(tax, bindings.map((b) => b.dataset)))
+  return bindings.filter((b) => top.has(b.dataset)).map((b) => DATASETS[b.dataset]).filter((d): d is Dataset => !!d)
+}
+
+// All selected lane layers share one geometry, so they merge into ONE layer (summed over the
+// union of the top-most selected leaf fields) - drawn once, no duplicate overlapping paths.
+async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> {
+  const datasets = topmostDatasets(bindings, LANE_TAXONOMY)
+  if (!datasets.length) return null
+  const d = await loadLinesMerged(datasets)
+  const weighted = d.values.size > 0
+  return {
+    id: 'lane',
+    primitive: 'field',
+    features: d.features,
+    values: d.values,
+    valueDomain: d.domain,
+    style: {
+      stroke: weighted ? SEA_BLUE : 'rgba(120,150,190,0.32)',
+      widthRange: weighted ? [0.4, 3] : [0.5, 0.5],
+      opacity: weighted ? 0.75 : 0.5,
+    },
+  }
+}
+
+// Field: baked streamlines (winds, currents), width by per-feature magnitude, coloured by the
+// dataset's identity ramp so multiple fields stay distinguishable.
+async function resolveField(b: Binding): Promise<ResolvedLayer> {
+  const ds = DATASETS[b.dataset]!
+  const d = await loadLinesData(ds)
+  const color = ds.id === 'currents' ? 'rgba(90,200,190,0.75)' : 'rgba(240,150,90,0.8)'
+  return {
+    id: `field-${ds.id}`,
+    primitive: 'field',
+    features: d.features,
+    values: d.values,
+    valueDomain: d.domain,
+    style: { stroke: color, widthRange: [0.3, 2.4], opacity: 0.8, arrowhead: true },
   }
 }
 
@@ -131,15 +198,28 @@ export async function buildLayers(
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
 
+  // Draw order (back to front): base, lanes (background), region, field, arcs, bubbles, markers.
   const tasks: Task[] = []
   if (bindings.some((b) => b.channel === 'base')) tasks.push({ keys: ['base'], run: resolveBase })
+  const laneBindings = bindings.filter((b) => b.channel === 'lane')
+  if (laneBindings.length) tasks.push({ keys: laneBindings.map(bindingKey), run: () => resolveLanes(laneBindings) })
   if (choro || area) {
     const keys = [choro, area].filter((b): b is Binding => b != null).map(bindingKey)
     tasks.push({ keys, run: () => resolveRegion(choro, area) })
   }
+  for (const b of bindings.filter((b) => b.channel === 'field')) tasks.push({ keys: [bindingKey(b)], run: () => resolveField(b) })
   for (const b of bindings.filter((b) => b.channel === 'arc')) tasks.push({ keys: [bindingKey(b)], run: () => resolveArc(b) })
   for (const b of bindings.filter((b) => b.channel === 'bubble')) tasks.push({ keys: [bindingKey(b)], run: () => resolveBubble(b) })
-  for (const b of bindings.filter((b) => b.channel === 'marker')) tasks.push({ keys: [bindingKey(b)], run: () => resolveMarker(b) })
+  // Marker bindings that share a snapshot (seaports by type) merge into one layer; different
+  // snapshots (airports vs seaports) stay separate.
+  const markerGroups = new Map<string, Binding[]>()
+  for (const b of bindings.filter((b) => b.channel === 'marker')) {
+    const ds = DATASETS[b.dataset]
+    if (!ds) continue
+    const key = snapshotKey(ds)
+    ;(markerGroups.get(key) ?? markerGroups.set(key, []).get(key)!).push(b)
+  }
+  for (const group of markerGroups.values()) tasks.push({ keys: group.map(bindingKey), run: () => resolveMarkers(group) })
 
   const settled = await Promise.allSettled(tasks.map((t) => t.run()))
   const layers: ResolvedLayer[] = []
@@ -157,14 +237,19 @@ export async function buildLayers(
   return { layers, failed }
 }
 
-/** Attribution strings for the datasets backing the active bindings (base included). */
+/** Attribution strings for the datasets actually drawn (base included). For a taxonomy channel
+ *  only the top-most selected node renders, so a cascaded subtree credits its source once. */
 export function attributionsFor(bindings: Binding[]): string[] {
+  const laneTop = new Set(topmostSelected(LANE_TAXONOMY, bindings.filter((b) => b.channel === 'lane').map((b) => b.dataset)))
+  const markerTop = new Set(topmostSelected(PORT_TAXONOMY, bindings.filter((b) => b.channel === 'marker').map((b) => b.dataset)))
   const out = new Set<string>()
   for (const b of bindings) {
     if (b.channel === 'base') {
       out.add(BASE_ATTRIBUTION)
       continue
     }
+    if (b.channel === 'lane' && !laneTop.has(b.dataset)) continue
+    if (b.channel === 'marker' && !markerTop.has(b.dataset)) continue
     const ds = DATASETS[b.dataset]
     if (ds) out.add(ds.attribution)
   }

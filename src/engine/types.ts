@@ -65,6 +65,10 @@ export interface LayerStyle {
   opacity?: number
   /** point/bubble: marker radius range [min, max] in px, mapped from value via sqrt. */
   radiusRange?: [number, number]
+  /** field: streamline stroke-width range [min, max] in px, mapped from magnitude via sqrt. */
+  widthRange?: [number, number]
+  /** field: draw a downstream arrowhead at each line's end (flow direction; streamlines only). */
+  arrowhead?: boolean
   /** flow: arc color. */
   arcColor?: string
   /** flow/point: drop features whose value is below this threshold (density knob). */
@@ -74,8 +78,9 @@ export interface LayerStyle {
 /**
  * A layer with its geometry + values already resolved by the app. `features` holds
  * GeoJSON appropriate to the primitive (areas for base/region, points for point/bubble,
- * LineStrings for flow). `values` maps a feature id to the value that drives the layer's
- * primary channel (color for region/choropleth, size for point/bubble, width for flow);
+ * LineStrings for flow and field). `values` maps a feature id to the value that drives the
+ * layer's primary channel (color for region/choropleth, size for point/bubble, width for
+ * flow, streamline width/magnitude for field);
  * `scale` says how. A region layer may also carry an `area` binding (a second dataset that
  * scales each region around its centroid) so a colored cartogram composes fill + area on
  * one path set.

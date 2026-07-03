@@ -18,6 +18,10 @@ import { WDI_INDICATORS } from '../src/app/catalog'
 import { loadA3ToNum, sleep } from './sources/_shared'
 import { buildWorldBankIndicator } from './sources/reference/worldbank'
 import { buildAirportsAndFlights } from './sources/transport/openflights'
+import { buildPorts } from './sources/maritime/ports'
+import { buildLanes } from './sources/maritime/lanes'
+import { buildWinds } from './sources/environment/winds'
+import { buildCurrents } from './sources/environment/currents'
 
 // Incremental by default: skip a dataset whose snapshot already exists. Pass --force
 // (via `pnpm refresh-data`) to re-fetch. A fresh checkout / CI still produces data once.
@@ -90,6 +94,53 @@ async function buildFlights(): Promise<void> {
   }
 }
 
+// Maritime: ports (IMF PortWatch, real AIS traffic) and the real shipping-lane network. The
+// two are independent - lanes are geometry, ports are traffic - so each guards its own fetch.
+async function buildMaritime(): Promise<void> {
+  if (FORCE || !present('ports.json')) {
+    try {
+      const ports = await buildPorts()
+      // Guard against a degraded fetch overwriting a good snapshot (PortWatch has ~2k ports).
+      if (ports.length >= 1000) write('ports.json', ports)
+      else console.warn(`  ports: only ${ports.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  ports skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  ports: present, skipping (pnpm refresh-data to refresh)')
+
+  if (FORCE || !present('shipping.json')) {
+    try {
+      const lanes = await buildLanes()
+      if (lanes.features.length >= 50) write('shipping.json', lanes)
+      else console.warn(`  lanes: only ${lanes.features.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  lanes skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  shipping: present, skipping (pnpm refresh-data to refresh)')
+}
+
+// Environment: winds + currents as streamline fields. Each is independent and self-guarding;
+// a source that is down is skipped (currents may defer without blocking winds) - never faked.
+async function buildEnvironment(): Promise<void> {
+  const fields: Array<{ name: string; build: () => Promise<{ features: unknown[] }> }> = [
+    { name: 'winds.json', build: buildWinds },
+    { name: 'currents.json', build: buildCurrents },
+  ]
+  for (const { name, build } of fields) {
+    if (!FORCE && present(name)) {
+      console.log(`  ${name}: present, skipping (pnpm refresh-data to refresh)`)
+      continue
+    }
+    try {
+      const fc = await build()
+      if (fc.features.length >= 20) write(name, fc)
+      else console.warn(`  ${name}: only ${fc.features.length} streamlines, kept existing`)
+    } catch (e) {
+      console.warn(`  ${name} skipped, kept existing: ${(e as Error).message}`)
+    }
+  }
+}
+
 // Per-snapshot weight-budget report. Today's snapshots are small (WDI ~2-5K, airports/
 // flights <1M) and lazy-loaded, so this is a guardrail, not a gate - its real job is to keep
 // M3's dense field (wind/current streamline) and route snapshots honest. Warns past budget.
@@ -119,6 +170,8 @@ async function main(): Promise<void> {
   console.log(`Building datasets → ${OUT}${FORCE ? ' (--force)' : ''}`)
   await buildWdi()
   await buildFlights()
+  await buildMaritime()
+  await buildEnvironment()
   reportWeights()
   console.log('Done.')
 }

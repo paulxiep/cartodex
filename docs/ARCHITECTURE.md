@@ -28,11 +28,13 @@ A "layer" is not one fused thing; it is three decoupled concepts, so the same da
 ways and two datasets can share a map:
 
 - **Dataset** — display-agnostic values + metadata (`src/app/catalog.ts`). Kinds: `region` (keyed by
-  numeric ISO), `point` (lon/lat), `pair` (flow endpoints), `grid` (vector field — M3).
+  numeric ISO), `point` (lon/lat), `pair` (flow endpoints), `grid` (vector field, baked to streamlines),
+  `lines` (a baked LineString network, e.g. shipping lanes).
 - **Channel** — how values map to a visual variable, with a **capacity** (`src/engine/channels.ts`):
   - *single-occupancy* (a second selection replaces the first): `choropleth` (region→colour),
     `area` (region→size, an in-place cartogram), `bubble` (region-centroid→size).
-  - *multi-occupancy* (distinguished by style): `marker` (points), `arc` (flows), `field` (M3).
+  - *multi-occupancy* (distinguished by style): `marker` (points), `arc` (flows), `field` (gridded
+    vector streamlines — winds, currents), `lane` (a baked line network drawn as context).
   - *structural*: `base` (land/borders, no dataset).
 - **Scale** — `{ type: linear | log | quantile | threshold | sqrt, ramp }`, defaulted per dataset
   (log/quantile for skewed magnitudes) and overridable per binding (`src/engine/lib/scales.ts`).
@@ -52,22 +54,25 @@ Its one constraint: density-equalization assumes true areas, so `area` requires 
 views. (Earlier drafts modeled the cartogram as a `D ∘ P` *view*; M2 reconciled it as an area channel
 so colour and area can combine.)
 
-## 2. Channels reduce to five primitives by datasets
+## 2. Channels reduce to six primitives by datasets
 
-Topic content (flights, demographics, resources, relations) is not separate code paths. Every channel
-draws through one of five rendering **primitives**, each parameterized by a **dataset**:
+Topic content (flights, demographics, resources, relations, winds) is not separate code paths. Every
+channel draws through one of six rendering **primitives**, each parameterized by a **dataset**:
 
 | Primitive | Renders | Channels | Example datasets |
 |-----------|---------|----------|------------------|
 | `base`          | land / borders | `base` | world-atlas land + country mesh |
 | `region`        | choropleth fill and/or in-place area scaling | `choropleth`, `area` | population, GDP, any fundamental |
 | `region-symbol` | proportional bubble at a region centroid | `bubble` | population, GDP magnitudes |
-| `point`         | sized markers at coordinates | `marker` | airports, ports, capitals |
-| `flow`          | a weighted arc between two geo-nodes | `arc` | flight routes, trade / relations |
+| `point`         | sized markers at coordinates | `marker` | airports, seaports |
+| `flow`          | weighted arcs between geo-nodes | `arc` | flight routes; political relations |
+| `field`         | per-feature lines, width by magnitude | `field`, `lane` | surface winds, ocean currents; shipping lanes |
 
 The key collapse: a flight route and a political relation are the same shape (a weighted edge), so both
-are `arc` over the `flow` primitive with different data. A colored cartogram is not a new primitive: it
-is the `region` primitive carrying both a colour binding and an area binding.
+are `arc` over the `flow` primitive with different data; likewise the shipping-lane network rides the
+`field` primitive (per-feature width by traffic), the same one that draws winds and currents. A colored
+cartogram is not a new primitive: it is the `region` primitive carrying both a colour binding and an
+area binding.
 
 ## 3. One render backend, one layer contract
 
@@ -142,7 +147,10 @@ Two very different inputs:
   **join key** (sources use country names, ISO alpha-2/-3, or custom codes, and disagree on edge
   cases like Kosovo or Taiwan), not the transport. A **producer** (`scripts/build-data.ts`)
   normalizes and joins source to geometry id, emitting small, id-keyed `public/data/<set>.json`.
-  Periodic update is a scheduled rebuild (GitHub Action cron or Cloudflare deploy hook).
+  The dynamic snapshots refresh on a schedule via a Cloudflare **Worker** producer (`deploy/producer/`)
+  running the same fetch-based builders into R2; snapshots derived from a WASM decoder (LERC-weighted
+  shipping lanes) or fixed climatology (winds, currents) are static, so they are built locally and
+  seeded once instead of re-run on the cron.
 
 Cartograms are computed **client-side** from `{ geometry + value table }` so variable toggles stay
 live; we never bake distorted geometry. `public/data/` is gitignored: it is a reproducible build
@@ -174,9 +182,18 @@ catalog (`pnpm gen-docs`) so the licence ledger never drifts.
 | airports (`point`) | OpenFlights | ODbL (attribution) | baked |
 | flight routes (`flow`) | OpenFlights routes, aggregated by airport pair (top routes by frequency) | ODbL (attribution) | baked |
 
-Ports, shipping/relations `flow` data, and cargo-specific filtering are not wired in the scaffold.
-The World Port Index (NGA, public domain) is a candidate for ports; global cargo ship routing is
-largely proprietary (AIS).
+M3 adds the maritime and environment domains, all from real open sources. On the redistributability of
+shipping: route *geometry* and *AIS traffic density* are open, even though proprietary
+origin-destination *volume* matrices (Lloyd's, Clarksons) are not — so cartodex uses the **real
+shipping-lane network** (newzealandpaul/Shipping-Lanes, CC BY-SA) and **weights each lane by real AIS
+traffic per ship type**, sampled at build time from the **World Bank / IMF Global Ship Density** rasters
+(cargo = commercial + oil & gas; other = passenger + leisure + fishing). The density services are
+ArcGIS `TilesOnly`, but their tiles are LERC (real Int32 values), so the producer fetches the tiles the
+lanes cross and decodes them — no shortest-path routing, no proxied weight. **Seaports** are the NGA
+World Port Index joined to IMF PortWatch AIS traffic, selectable by vessel type (total / cargo /
+container / tanker / dry bulk). Winds and currents are real gridded fields (FNMOC, Aviso via NOAA
+ERDDAP) integrated into streamlines at build time. Where a port or lane has no traffic datum it renders
+empty / unweighted — never faked.
 
 ## 6. How to add a map
 
@@ -186,7 +203,8 @@ largely proprietary (AIS).
   crosswalk entries and a producer that writes its snapshot); bind it from a preset. A region dataset
   is instantly available as choropleth, area, and bubble.
 - **A genuinely new display mode**: add a `Channel` row (`engine/channels.ts`) and, if it needs a new
-  draw routine, a primitive under `engine/primitives/`. This is rare; the next one is M3's `field`.
+  draw routine, a primitive under `engine/primitives/`. This is rare; M3 added the `field` primitive
+  and drew both winds/currents (`field` channel) and the shipping-lane network (`lane` channel) through it.
 
 ## 7. Toolchain & delivery
 
@@ -197,5 +215,6 @@ largely proprietary (AIS).
   dedupes dependencies across the whole local workspace.
 - **Vite + TypeScript (strict) + ESLint**: multi-page (`index.html` gallery + `compose.html`
   composer), relative `base` so the build serves from any host root.
-- **Cloudflare Pages + custom domain**: `pnpm build` produces `dist/`; a scheduled rebuild refreshes
-  data; a Cloudflare Worker is added only as the licensing proxy.
+- **Cloudflare Pages + custom domain**: `pnpm build` produces `dist/`; a scheduled Cloudflare Worker
+  (`deploy/producer/`) refreshes the dynamic data snapshots into R2 and serves them same-origin at
+  `/data/*`. A Worker can also front a licence-restricted source as a proxy.

@@ -11,7 +11,10 @@ export function farSideTest(ctx: RenderContext): ((lonlat: [number, number]) => 
   const projection = ctx.projector.projection
   if (!projection) return null
   const clip = projection.clipAngle() as number | null
-  if (clip == null || clip >= 180) return null
+  // Cylindrical projections (equirectangular, Equal Earth) report clipAngle 0, meaning no
+  // small-circle clip - they show the whole world, so nothing is on a "far side". Only a
+  // positive clip below 180° (orthographic 90°) actually hides a hemisphere.
+  if (clip == null || clip <= 0 || clip >= 180) return null
   const rot = projection.rotate()
   const center: [number, number] = [-rot[0], -rot[1]]
   const maxDist = (clip * Math.PI) / 180

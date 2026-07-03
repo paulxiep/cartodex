@@ -5,6 +5,7 @@ import { getView } from '../engine'
 import { DATASETS } from './catalog'
 import { PRESETS, presetHash } from './presets'
 import type { Preset } from './presets'
+import { VERSION } from './version'
 
 function cell(p: Preset): string {
   const href = `${import.meta.env.BASE_URL}compose.html${presetHash(p)}`
@@ -28,7 +29,7 @@ function cell(p: Preset): string {
 export function mountGallery(root: HTMLElement): void {
   root.innerHTML = `
     <header class="hero">
-      <h1>Cartodex</h1>
+      <h1>Cartodex <a class="version" href="${import.meta.env.BASE_URL}changelog.html" title="Changelog">v${VERSION}</a></h1>
       <p>A composable codex of maps - pick a <strong>view</strong>, toggle <strong>layers</strong>, and they combine.</p>
       <a class="cta" href="${import.meta.env.BASE_URL}compose.html">Open the composer →</a>
     </header>

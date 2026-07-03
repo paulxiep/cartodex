@@ -99,17 +99,17 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
       .attr('height', height)
       .attr('viewBox', `0 0 ${width} ${height}`)
       .style('display', 'block')
-      .style('background', '#0c0e12')
+      .style('background', '#06080c')
 
     const root = svg.append('g').attr('class', 'cartodex-root')
 
     // Sphere outline + graticule behind the layers, for projection views.
     const hasBackground = projector.path != null
     const spherePath = hasBackground
-      ? root.append('path').attr('class', 'cartodex-sphere').attr('fill', '#10151c').attr('stroke', '#272d36').attr('stroke-width', 1)
+      ? root.append('path').attr('class', 'cartodex-sphere').attr('fill', '#0d1826').attr('stroke', '#3a4657').attr('stroke-width', 1)
       : null
     const gratPath = hasBackground
-      ? root.append('path').attr('class', 'cartodex-graticule').attr('fill', 'none').attr('stroke', 'rgba(120,140,170,0.12)').attr('stroke-width', 0.5)
+      ? root.append('path').attr('class', 'cartodex-graticule').attr('fill', 'none').attr('stroke', 'rgba(130,150,180,0.16)').attr('stroke-width', 0.5)
       : null
 
     const layerGroups: Array<{ group: SvgGroup; layer: ResolvedLayer }> = []

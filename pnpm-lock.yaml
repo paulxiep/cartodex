@@ -75,6 +75,9 @@ importers:
       globals:
         specifier: ^17.7.0
         version: 17.7.0
+      lerc:
+        specifier: ^4.1.1
+        version: 4.1.1
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -779,6 +782,9 @@ packages:
 
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
+
+  lerc@4.1.1:
+    resolution: {integrity: sha512-rgMqdHK4+gIUnF80OkWyfRae2u1B96BT8ZAjbLB4xfxIdfCHQ9GOf17haZVCag+5X9WC+40hLNZPbwctFs2FPQ==}
 
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
@@ -1649,6 +1655,8 @@ snapshots:
   keyv@4.5.4:
     dependencies:
       json-buffer: 3.0.1
+
+  lerc@4.1.1: {}
 
   levn@0.4.1:
     dependencies:
