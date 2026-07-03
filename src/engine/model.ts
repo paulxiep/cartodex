@@ -7,16 +7,16 @@
 /**
  * The rendering primitives - the low-level draw routines. A channel names a primitive;
  * topic content is data over these, not new code. `region-symbol` draws centroid bubbles;
- * `field` (gridded vector streamlines) is reserved for M3.
+ * `field` draws gridded vector streamlines (winds, ocean currents).
  */
-export type Primitive = 'base' | 'region' | 'region-symbol' | 'point' | 'flow'
+export type Primitive = 'base' | 'region' | 'region-symbol' | 'point' | 'flow' | 'field'
 
 /**
  * A display-mode channel: how a dataset's values map to a visual channel. Channels carry a
  * capacity (see `ChannelCapacity`) and target one primitive. This is the public display
  * axis; `Primitive` is the renderer it dispatches to.
  */
-export type ChannelId = 'base' | 'choropleth' | 'area' | 'bubble' | 'marker' | 'arc'
+export type ChannelId = 'base' | 'choropleth' | 'area' | 'bubble' | 'marker' | 'arc' | 'field' | 'lane'
 
 /**
  * Channel capacity - how many datasets a channel can legibly hold at once.
@@ -26,8 +26,15 @@ export type ChannelId = 'base' | 'choropleth' | 'area' | 'bubble' | 'marker' | '
  */
 export type ChannelCapacity = 'single' | 'multi' | 'structural'
 
-/** The dataset kinds a channel can bind. `grid` (vector fields) is reserved for M3. */
-export type DatasetKind = 'region' | 'point' | 'pair' | 'grid'
+/**
+ * The dataset kinds a channel can bind.
+ *   region - values keyed by numeric ISO code.
+ *   point  - lon/lat markers.
+ *   pair   - flow endpoints (two point ids).
+ *   grid   - a gridded vector field (winds, currents), baked to streamline LineStrings.
+ *   lines  - a baked LineString network (shipping lanes), drawn as context geometry.
+ */
+export type DatasetKind = 'region' | 'point' | 'pair' | 'grid' | 'lines'
 
 /** How a value column maps to a color/size channel. `sqrt` is the size default. */
 export type ScaleType = 'linear' | 'log' | 'quantile' | 'threshold' | 'sqrt'

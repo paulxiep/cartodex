@@ -53,7 +53,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 
 ## Current state
 
-**M0 scaffold, M1 country fundamentals, and M2 platform architecture complete.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel.
+**M0 scaffold, M1 country fundamentals, M2 platform architecture, and M3 maritime & environmental complete.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, and wind/current fields ride the same platform.
 
 **M0 — Scaffold** laid the engine: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that emits id-keyed snapshots. First data: World Bank population and OpenFlights airports + routes.
 
@@ -71,9 +71,15 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Bubble layer** — a proportional `region-symbol` (centroid bubble) that works across every view, including the polar and globe projections.
 - **Domain-neutral catalog** — the WDI-shaped registry became a general `Dataset` catalog (World Bank is one source adapter); `docs/DATA_SOURCES.md` is generated from it, and the producer reports a per-snapshot weight budget.
 
+**M3 — Maritime & environmental** opens two new domains on the platform, all from real open sources:
+
+- **Seaports by real traffic** — a full outer join of the NGA World Port Index (the port registry, public domain) and IMF PortWatch AIS vessel traffic. Markers are sized by real vessel count; a port with no traffic datum renders empty rather than faked, and inland river ports (the Amazon, Elbe, Mississippi) are included.
+- **Real shipping lanes** — the observed global shipping-lane network (newzealandpaul/Shipping-Lanes, CC BY-SA) drawn as a subtle context layer on a new `lane` channel. Not a computed shortest path or great circle: the corridors ships actually use, shaped by the winds and currents shown beside them.
+- **Winds and currents** — surface winds (FNMOC) and ocean surface currents (Aviso), real gridded fields fetched via NOAA ERDDAP and integrated at build time into streamlines on a new `field` channel, coloured by layer and sized by magnitude.
+
 Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
 
-Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade relations, cargo ports and shipping, prevailing winds and currents (M3), and the contiguous cartogram.
+Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade relations, and the contiguous cartogram.
 
 ## Roadmap
 
@@ -82,7 +88,7 @@ Not wired: detailed energy mix and emissions, agricultural production volumes, m
 | **M0, scaffold** | Two-axis engine (`createMap`, view/layer/dataset registries, compatibility table), four layer primitives, gallery + composer, licensing-aware loader, data producer, and the TypeScript + ESLint + Vite + pnpm toolchain | Done |
 | **M1 — Country fundamentals** | ~30 World Bank indicators (demographics · economy · resources · health) as themed `region` choropleths from a declarative catalog; data decoupled from the build (scheduled producer → private storage, read same-origin); interaction state preserved across layer toggles | Done |
 | **M2 — Platform architecture** | dataset × channel × scale model; display-mode channels + per-channel composer (bivariate maps); scale engine (log/quantile/threshold colour, sqrt size) fixing magnitude skew; `region-symbol` bubble layer; area-channel colored cartogram; domain-neutral catalog + generated `DATA_SOURCES.md` + weight-budget report | Done |
-| **M3 — Maritime & environmental** | seaports, shipping routes (real sea-lane paths), prevailing winds and ocean currents via a new `grid`/`field` channel | Planned |
+| **M3 — Maritime & environmental** | seaports sized by real AIS traffic (WPI ∪ IMF PortWatch); the real shipping-lane network on a `lane` channel; surface winds and ocean currents (FNMOC, Aviso via NOAA ERDDAP) as streamlines on a new `field` channel | Done |
 
 Later milestones are refined here as work is defined.
 

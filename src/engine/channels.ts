@@ -1,9 +1,9 @@
 // Display-mode channel registry. A channel is how a dataset's values map to a visual
 // variable: choropleth (region→colour), area (region→size, an in-place cartogram scaling),
-// bubble (region-centroid→size), marker (point→size), arc (pair→width). `base` is the
-// structural land/borders channel (no dataset). Each channel names the primitive it draws
-// through, its capacity (how many datasets it holds), the dataset kind it binds, and a
-// default scale type. `field` (gridded vector streamlines) will register here in M3.
+// bubble (region-centroid→size), marker (point→size), arc (pair→width), field (grid→
+// streamline width). `base` is the structural land/borders channel (no dataset). Each channel
+// names the primitive it draws through, its capacity (how many datasets it holds), the dataset
+// kind it binds, and a default scale type.
 //
 // Capacity is intrinsic to the encoding (you cannot legibly stack two choropleths), so it
 // lives here, not in the composer; the composer reads it to build single- vs multi-select
@@ -65,6 +65,24 @@ export const CHANNELS: Record<ChannelId, Channel> = {
     encodes: 'width',
     datasetKind: 'pair',
     defaultScaleType: 'linear',
+  },
+  field: {
+    id: 'field',
+    label: 'Field (streamlines)',
+    primitive: 'field',
+    capacity: 'multi',
+    encodes: 'width',
+    datasetKind: 'grid',
+    defaultScaleType: 'sqrt',
+  },
+  lane: {
+    id: 'lane',
+    label: 'Lanes (network)',
+    primitive: 'field',
+    capacity: 'multi',
+    encodes: 'width',
+    datasetKind: 'lines',
+    defaultScaleType: 'sqrt',
   },
 }
 

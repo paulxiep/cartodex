@@ -16,16 +16,6 @@ export interface Preset {
 
 export const PRESETS: Preset[] = [
   {
-    id: 'gdp-per-capita',
-    label: 'GDP per capita',
-    description: 'Equirectangular choropleth of GDP per capita (log scale, World Bank).',
-    view: 'equirectangular',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'choropleth', dataset: 'gdp-per-capita' },
-    ],
-  },
-  {
     id: 'gdp-and-population',
     label: 'GDP + population (bivariate)',
     description: 'Choropleth GDP per capita with population as proportional bubbles — two datasets at once.',
@@ -72,6 +62,50 @@ export const PRESETS: Preset[] = [
       { channel: 'base', dataset: 'land' },
       { channel: 'marker', dataset: 'airports' },
       { channel: 'arc', dataset: 'flights' },
+    ],
+  },
+  {
+    id: 'seaports-lanes',
+    label: 'Seaports & shipping lanes',
+    description: 'Seaports sized by real AIS vessel traffic (IMF PortWatch) over the real shipping-lane network.',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'shipping' },
+      { channel: 'marker', dataset: 'ports' },
+    ],
+  },
+  {
+    id: 'cargo-traffic',
+    label: 'Cargo shipping traffic',
+    description: 'Shipping lanes weighted by real cargo AIS traffic (commercial and oil & gas, World Bank / IMF).',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'shipping-cargo' },
+    ],
+  },
+  {
+    id: 'winds-currents',
+    label: 'Winds & currents',
+    description: 'Surface winds and ocean surface currents as streamlines, the forces that shape the sea lanes.',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'field', dataset: 'winds' },
+      { channel: 'field', dataset: 'currents' },
+    ],
+  },
+  {
+    id: 'maritime-globe',
+    label: 'Maritime world',
+    description: 'Seaports, ship-traffic routes and surface winds composed on a spin-and-zoom globe.',
+    view: 'orthographic',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'shipping-all' },
+      { channel: 'field', dataset: 'winds' },
+      { channel: 'marker', dataset: 'ports' },
     ],
   },
 ]

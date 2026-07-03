@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 
-// Cartodex ships two HTML entry points:
-//   index.html   - the gallery / "codex" of preset (view x layers) combos
-//   compose.html - the composer (view picker + layer toggles), deep-linked via the URL hash
+// Cartodex ships three HTML entry points:
+//   index.html     - the gallery / "codex" of preset (view x layers) combos
+//   compose.html   - the composer (view picker + layer toggles), deep-linked via the URL hash
+//   changelog.html - the changelog, rendered from CHANGELOG.md
 // Relative base ('./') keeps assets working at any host root (Cloudflare Pages custom domain).
 export default defineConfig({
   base: './',
@@ -18,6 +19,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         compose: 'compose.html',
+        changelog: 'changelog.html',
       },
     },
   },

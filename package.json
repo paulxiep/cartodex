@@ -46,6 +46,7 @@
     "@types/topojson-specification": "^1.0.5",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
+    "lerc": "^4.1.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0",

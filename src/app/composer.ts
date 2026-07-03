@@ -6,16 +6,37 @@
 // lives in the URL hash so any combination is shareable/deep-linkable.
 
 import { createMap, getView, compatible, VIEW_LIST, CHANNEL_LIST } from '../engine'
-import type { Channel, MapHandle, ViewId } from '../engine'
+import type { Channel, ChannelId, MapHandle, ViewId } from '../engine'
 import { buildLayers, bindingKey, attributionsFor } from './layers'
 import type { Binding } from './layers'
-import { DATASETS, datasetsOfKind, DOMAIN_ORDER, DOMAIN_LABELS } from './catalog'
+import { DATASETS, datasetsOfKind, DOMAIN_ORDER, DOMAIN_LABELS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
+import { applySelection, normalizeSelection } from './taxonomy'
+import type { Taxonomy } from './taxonomy'
 import { PRESETS } from './presets'
 import { parseHash, toHash } from './state'
 import type { State } from './state'
+import { VERSION } from './version'
 
 const DEFAULT: State = { view: PRESETS[0]!.view, bindings: PRESETS[0]!.bindings }
+
+// Channels whose multi-select is a hierarchy. The taxonomy processor (taxonomy.ts) does the work;
+// the composer just supplies the right taxonomy per channel (empty → flat multi-select).
+const CHANNEL_TAXONOMY: Partial<Record<ChannelId, Taxonomy>> = { lane: LANE_TAXONOMY, marker: PORT_TAXONOMY }
+const taxonomyFor = (channel: ChannelId): Taxonomy => CHANNEL_TAXONOMY[channel] ?? {}
+
+/** Make a parsed state consistent: normalize each taxonomy channel's selection (e.g. a deep-link
+ *  with only a parent expands to its subtree). Non-taxonomy bindings (with scales) are untouched. */
+function normalizeState(s: State): State {
+  let bindings = s.bindings
+  for (const channel of Object.keys(CHANNEL_TAXONOMY) as ChannelId[]) {
+    const ids = bindings.filter((b) => b.channel === channel).map((b) => b.dataset)
+    if (!ids.length) continue
+    const norm = [...normalizeSelection(taxonomyFor(channel), ids)]
+    bindings = [...bindings.filter((b) => b.channel !== channel), ...norm.map((dataset) => ({ channel, dataset }))]
+  }
+  return { ...s, bindings }
+}
 
 // Group a channel's candidate datasets by domain, in taxonomy order, for <optgroup>s.
 function byDomain(datasets: Dataset[]): Array<{ label: string; datasets: Dataset[] }> {
@@ -56,22 +77,31 @@ function channelSlotHtml(ch: Channel): string {
         </select>
       </div>`
   }
-  // multi
-  const rows = byDomain(datasets)
-    .map(
-      (g) =>
-        g.datasets
-          .map(
-            (d) =>
-              `<label class="channel-row"><input type="checkbox" data-role="multi" value="${d.id}" /> <span>${esc(d.label)}</span></label>`,
-          )
-          .join(''),
-    )
-    .join('')
+  // multi: render the channel's taxonomy as an indented tree - parents (Seaports, Cargo,
+  // Non-cargo) with their children one level deeper; datasets outside the taxonomy are flat roots.
+  // Selecting a node cascades through the taxonomy (wired in toggleMulti).
+  const row = (d: Dataset, depth: number): string =>
+    `<label class="channel-row" style="padding-left:${depth * 16}px"><input type="checkbox" data-role="multi" value="${d.id}" /> <span>${esc(d.label)}</span></label>`
+  const tax = taxonomyFor(ch.id)
+  const childIds = new Set(Object.values(tax).flat())
+  const byId = new Map(datasets.map((d) => [d.id, d]))
+  const done = new Set<string>()
+  const parts: string[] = []
+  const emit = (d: Dataset, depth: number): void => {
+    if (done.has(d.id)) return
+    done.add(d.id)
+    parts.push(row(d, depth))
+    for (const cid of tax[d.id] ?? []) {
+      const c = byId.get(cid)
+      if (c) emit(c, depth + 1)
+    }
+  }
+  for (const d of datasets) if (!childIds.has(d.id)) emit(d, 0)
+  for (const d of datasets) emit(d, 0) // any strays (shouldn't happen)
   return `
     <div class="channel-slot" data-channel="${ch.id}">
       <label class="channel-head">${esc(ch.label)}</label>
-      <div class="channel-multi">${rows}</div>
+      <div class="channel-multi">${parts.join('')}</div>
     </div>`
 }
 
@@ -79,7 +109,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <aside class="panel">
       <a class="back" href="${import.meta.env.BASE_URL}">← gallery</a>
-      <h1>Cartodex</h1>
+      <h1>Cartodex <a class="version" href="${import.meta.env.BASE_URL}changelog.html" title="Changelog">v${VERSION}</a></h1>
       <section><h2>View</h2><div class="views" id="views"></div></section>
       <section><h2>Channels</h2><div class="channels" id="channels">
         ${CHANNEL_LIST.map(channelSlotHtml).join('')}
@@ -97,7 +127,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   const loadingEl = root.querySelector<HTMLDivElement>('#loading')!
   const attrEl = root.querySelector<HTMLElement>('#attribution')!
 
-  let state = parseHash(location.hash, DEFAULT)
+  let state = normalizeState(parseHash(location.hash, DEFAULT))
   let handle: MapHandle | null = null
   let applyToken = 0
   // Bindings whose dataset failed to load this render (snapshot missing / source down). The
@@ -147,10 +177,15 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     void apply(false)
   }
 
+  // Multi-select with taxonomy consistency: for a channel with a hierarchy (lanes), toggling a
+  // node cascades to its subtree/ancestors via the taxonomy processor; other channels have an
+  // empty taxonomy and toggle flat.
   function toggleMulti(channel: Channel['id'], dataset: string, on: boolean): void {
-    let bindings = state.bindings.filter((b) => !(b.channel === channel && b.dataset === dataset))
-    if (on) bindings = [...bindings, { channel, dataset }]
-    state = { ...state, bindings }
+    const tax = taxonomyFor(channel)
+    const current = state.bindings.filter((b) => b.channel === channel).map((b) => b.dataset)
+    const sel = applySelection(tax, current, dataset, on)
+    const others = state.bindings.filter((b) => b.channel !== channel)
+    state = { ...state, bindings: [...others, ...[...sel].map((d) => ({ channel, dataset: d }))] }
     void apply(false)
   }
 
@@ -216,7 +251,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   }
 
   window.addEventListener('hashchange', () => {
-    state = parseHash(location.hash, DEFAULT)
+    state = normalizeState(parseHash(location.hash, DEFAULT))
     void apply(true)
   })
 
