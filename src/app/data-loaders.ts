@@ -18,8 +18,18 @@ import type { Dataset } from './catalog'
 // scheduled producer writes to, so data refreshes without an app redeploy.
 const DATA_BASE = import.meta.env.VITE_DATA_BASE ?? `${import.meta.env.BASE_URL}data/`
 
-function urlOf(ds: Dataset): string {
-  return ds.source.mode === 'baked' ? `${DATA_BASE}${ds.source.snapshot}` : ds.source.url
+const mm = (m: number): string => String(m).padStart(2, '0')
+
+// Resolve a dataset to its snapshot URL. A `temporal: 'monthly'` dataset (winds/currents/SST) is
+// baked per month as `<base>-MM.json`; the active month (from the composer's global month control)
+// selects which one loads, so only the shown month is fetched. Non-temporal datasets ignore `month`.
+function urlOf(ds: Dataset, month?: number): string {
+  if (ds.source.mode !== 'baked') return ds.source.url
+  const snapshot =
+    ds.temporal === 'monthly' && month != null
+      ? ds.source.snapshot.replace(/\.json$/, `-${mm(month)}.json`)
+      : ds.source.snapshot
+  return `${DATA_BASE}${snapshot}`
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -175,8 +185,8 @@ function sumFields(fc: FeatureCollection, fields: Iterable<string>): Map<string 
   return values
 }
 
-export async function loadLinesData(ds: Dataset): Promise<LinesData> {
-  const fc = await fetchJson<FeatureCollection>(urlOf(ds))
+export async function loadLinesData(ds: Dataset, month?: number): Promise<LinesData> {
+  const fc = await fetchJson<FeatureCollection>(urlOf(ds, month))
   const values = sumFields(fc, ds.valueFields ?? ['magnitude'])
   return { features: fc, values, domain: extentOf(values.values()) }
 }
@@ -207,8 +217,8 @@ export interface SurfaceData {
  * width. Mirrors `loadLinesData`, but reads one value field (default `value`) rather than
  * summing traffic classes. Feature ids are assigned by index so the colour scale can key off them.
  */
-export async function loadSurfaceData(ds: Dataset): Promise<SurfaceData> {
-  const fc = await fetchJson<FeatureCollection>(urlOf(ds))
+export async function loadSurfaceData(ds: Dataset, month?: number): Promise<SurfaceData> {
+  const fc = await fetchJson<FeatureCollection>(urlOf(ds, month))
   const field = ds.valueFields?.[0] ?? 'value'
   const values = new Map<string | number, number>()
   fc.features.forEach((f, i) => {

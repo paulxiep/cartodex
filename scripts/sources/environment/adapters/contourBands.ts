@@ -78,7 +78,15 @@ export function scalarGridToBands(
       if (Number.isFinite(v) && v < min) min = v
     }
   }
+  if (!Number.isFinite(min)) throw new Error('grid has no finite values')
   const floor = Math.floor(min) - 1
+  // No-data cells (NaN land / masked ocean, e.g. SST over continents) get a sentinel strictly below
+  // the floor threshold, so d3-contour drops them from every band - they fall under the lowest cut,
+  // yield no polygon, and render transparent - while boundary interpolation between sentinel and real
+  // ocean stays finite (no NaN vertices at coastlines). Elevation is fully defined, so this is a no-op
+  // there; the floor band still encloses its deepest real cells.
+  const noData = floor - 1e4
+  for (let i = 0; i < flat.length; i++) if (!Number.isFinite(flat[i]!)) flat[i] = noData
   const bands = contours().size([w, h]).thresholds([floor, ...levels])(flat)
 
   // Affine grid-index -> lon/lat. d3-contour returns image-space rings (y increasing downward);

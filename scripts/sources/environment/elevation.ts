@@ -25,7 +25,7 @@ export async function buildElevation(): Promise<FeatureCollection> {
     datasetId: 'etopo180',
     variable: 'altitude',
     lat: [-90, 90],
-    lon: [-180, 180], // full sphere; geoStitch makes the +-180 seam seamless (no dropped strip)
+    lon: [-180, 180], // full sphere; bands are antimeridian-cut at +-180 (no dropped strip, no stitch)
     stride: STRIDE,
   })
   const { features, bandCount, floor } = scalarGridToBands(grid, HYPSOMETRIC_LEVELS)

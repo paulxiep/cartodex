@@ -11,7 +11,7 @@
 // erased at runtime, so this stays Node-safe.
 
 // Pure vocabulary only (no DOM/d3), so the Node producer can import this module.
-import type { DatasetKind, DivergingRamp, ScaleType } from '../engine/model'
+import type { DatasetKind, DivergingRamp, RampRef, ScaleType } from '../engine/model'
 import type { Taxonomy } from './taxonomy'
 
 /** Thematic grouping for the composer. Open taxonomy: maritime/environment land in M3,
@@ -67,13 +67,16 @@ export interface Dataset {
   attribution: string
   /** default colour scale type when bound to a colour channel; size channels always use sqrt. */
   defaultScale?: ScaleType
-  /** default colour ramp (d3-scale-chromatic key) for a colour channel. */
-  defaultRamp?: string
+  /** default colour ramp: a d3-scale-chromatic scheme name or an explicit CSS stop-list. */
+  defaultRamp?: RampRef
   /** `surface`/`threshold`: explicit band breaks (also the producer's contour levels) so the
    *  colour buckets align to the baked bands rather than quantile-derived ones. */
   defaultThresholds?: number[]
   /** `surface`: a diverging colour ramp whose two sides meet at a pivot (sea level for relief). */
   defaultDiverging?: DivergingRamp
+  /** month-resolved snapshot: the baked file is per-month (`<id>-MM.json`) and the active month
+   *  (from the composer's global month control) selects which one loads. Winds, currents, SST. */
+  temporal?: 'monthly'
   /** for `pair` datasets: the `point` dataset whose ids the endpoints reference. */
   endpointsFrom?: string
   /** the disjoint LEAF fields this layer's value sums over (point: vessel-type counts, default
@@ -255,6 +258,17 @@ export const HYPSOMETRIC_RAMP: DivergingRamp = {
   above: ['#2e7d32', '#8bc34a', '#e6d27a', '#b5834f', '#8a6240', '#f5f5f5'],
 }
 
+// ── Sea-surface temperature constants (shared by the producer and the catalog) ────────────
+// Band cut levels in °C, used BOTH as the producer's d3-contour levels AND the colour
+// thresholds, and FIXED across all 12 months so a July map and a January map share one scale
+// and read as directly comparable. Spans polar water (~-2) to the tropical warm pool (~30).
+export const SST_LEVELS = [-2, 0, 4, 8, 12, 16, 20, 24, 28, 30]
+
+// Sequential cold→warm thermal ramp (a custom stop-list, like the hypsometric one). Deep blue
+// (cold) → cyan/green → yellow → orange → red (warm); monotonically warming, no light midpoint,
+// so it reads as an ocean-heat scale rather than a diverging one.
+export const SST_RAMP: RampRef = ['#04127a', '#1d54b5', '#2e8bcc', '#25b3a0', '#5fc95a', '#c3d92f', '#f2d024', '#f29423', '#e0562a', '#a11f1a']
+
 export const DATASETS: Record<string, Dataset> = {
   ...Object.fromEntries(WDI_INDICATORS.map((ind) => [ind.id, wdiDataset(ind)])),
   airports: {
@@ -288,8 +302,9 @@ export const DATASETS: Record<string, Dataset> = {
     source: { mode: 'baked', snapshot: 'winds.json' },
     provider: 'FNMOC via NOAA CoastWatch ERDDAP',
     license: 'Public domain (US Gov)',
-    attribution: 'Winds: FNMOC 10 m ocean surface winds via NOAA CoastWatch ERDDAP (public domain) — mean field, streamlines',
+    attribution: 'Winds: FNMOC 10 m ocean surface winds via NOAA CoastWatch ERDDAP (public domain) — monthly climatology, streamlines',
     defaultRamp: 'YlOrRd',
+    temporal: 'monthly',
   },
   currents: {
     id: 'currents',
@@ -299,8 +314,24 @@ export const DATASETS: Record<string, Dataset> = {
     source: { mode: 'baked', snapshot: 'currents.json' },
     provider: 'Aviso via NOAA CoastWatch ERDDAP',
     license: 'Aviso+ altimetry (attribution)',
-    attribution: 'Currents: Aviso geostrophic surface currents via NOAA CoastWatch ERDDAP — mean field, streamlines',
+    attribution: 'Currents: Aviso geostrophic surface currents via NOAA CoastWatch ERDDAP — monthly climatology, streamlines',
     defaultRamp: 'PuBuGn',
+    temporal: 'monthly',
+  },
+  // ── Sea-surface temperature (M5b): real OISST monthly climatology as contour bands ───────
+  sst: {
+    id: 'sst',
+    label: 'Sea-surface temperature',
+    kind: 'surface',
+    domain: 'environment',
+    source: { mode: 'baked', snapshot: 'sst.json' },
+    provider: 'NOAA OISST v2.1 via NOAA ERDDAP',
+    license: 'Public domain (US Gov)',
+    attribution: 'SST: NOAA OISST v2.1 monthly climatology (public domain) via NOAA ERDDAP — contour bands, °C',
+    defaultScale: 'threshold',
+    defaultThresholds: SST_LEVELS,
+    defaultRamp: SST_RAMP,
+    temporal: 'monthly',
   },
   // ── Elevation & bathymetry (M5): real ETOPO relief as hypsometric contour bands ──────────
   elevation: {

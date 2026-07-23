@@ -63,7 +63,10 @@ const BUCKETS = 7
  * non-positive values under `log`, resolve to `undefined` (rendered as no-data).
  */
 export function makeColorScale(values: Iterable<number>, spec: ScaleSpec): ColorFn {
-  const interp = interpolatorByName(spec.ramp)
+  // Resolve the ramp once, accepting either a stock scheme name or a custom stop-list; every
+  // scale type (linear/log/quantile/threshold) then samples the same t→colour function, so a
+  // sequential threshold (e.g. an SST heatmap) can carry a bespoke palette just like a scheme.
+  const interp = rampInterpolator(spec.ramp ?? 'YlGnBu')
   const arr = [...values].filter((v) => Number.isFinite(v))
   if (arr.length === 0) return () => undefined
 

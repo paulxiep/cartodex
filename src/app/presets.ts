@@ -4,7 +4,7 @@
 
 import type { ViewId } from '../engine'
 import type { Binding } from './layers'
-import { toHash } from './state'
+import { toHash, defaultMonth } from './state'
 
 export interface Preset {
   id: string
@@ -12,6 +12,8 @@ export interface Preset {
   description: string
   view: ViewId
   bindings: Binding[]
+  /** month (1-12) to open at, for a preset that binds a temporal layer (winds/currents/SST). */
+  month?: number
 }
 
 export const PRESETS: Preset[] = [
@@ -207,8 +209,23 @@ export const PRESETS: Preset[] = [
       { channel: 'marker', dataset: 'quakes-recent' },
     ],
   },
+  // M5b: sea-surface temperature (OISST monthly climatology) as an ocean-heat surface, with the
+  // geostrophic currents that redistribute that heat drawn over it. Month-resolved: opens in July,
+  // and the composer's month control walks the seasonal cycle.
+  {
+    id: 'sst-currents',
+    label: 'SST & currents',
+    description: 'Sea-surface temperature (NOAA OISST monthly climatology) as an ocean-heat surface, with geostrophic surface currents streaming over it — pick a month to see the season shift.',
+    view: 'equirectangular',
+    month: 7,
+    bindings: [
+      { channel: 'surface', dataset: 'sst' },
+      { channel: 'field', dataset: 'currents' },
+      { channel: 'base', dataset: 'land' },
+    ],
+  },
 ]
 
 export function presetHash(p: Preset): string {
-  return toHash({ view: p.view, bindings: p.bindings })
+  return toHash({ view: p.view, bindings: p.bindings, month: p.month ?? defaultMonth() })
 }

@@ -69,7 +69,7 @@ channel draws through one of seven rendering **primitives**, each parameterized 
 | `point`         | sized markers at coordinates | `marker` | airports, seaports |
 | `flow`          | weighted arcs between geo-nodes | `arc` | flight routes; political relations |
 | `field`         | per-feature lines, width by magnitude | `field`, `lane` | surface winds, ocean currents; shipping lanes |
-| `surface`       | scalar contour bands, filled by value | `surface` | elevation & bathymetry (relief) |
+| `surface`       | scalar contour bands, filled by value | `surface` | elevation & bathymetry (relief); sea-surface temperature |
 
 The key collapse: a flight route and a political relation are the same shape (a weighted edge), so both
 are `arc` over the `flow` primitive with different data; likewise the shipping-lane network rides the
@@ -234,13 +234,27 @@ capability — `ScaleSpec.diverging`, per-side ramps meeting at a pivot). Becaus
 SVG-only, the surface is the SVG-native form of a heatmap: the producer runs marching squares
 (`d3-contour`, build-time) at a shared hypsometric level list — the same levels are the colour
 thresholds, so each band's `value` maps to its own swatch. It composes as a single-occupancy
-**background** (relief under earthquakes; a future SST surface under currents), with the `base` layer
-rendered borders-only over it. The geometry work — contouring, the grid→lon/lat transform, and
-emitting valid full-sphere bands **cut at the antimeridian** so they render seamlessly under every
-projection — lives in one shared build-layer factory, `scripts/sources/environment/adapters/
-contourBands.ts` (per §3's projection-invariant-geometry rule); the `elevation` builder is a thin
-fetch over it, and future scalar surfaces (SST, climate) are the same two lines against a different
-variable.
+**background** (relief under earthquakes; SST under currents), with the `base` layer rendered
+borders-only over it. The geometry work — contouring, the grid→lon/lat transform, and emitting valid
+full-sphere bands **cut at the antimeridian** so they render seamlessly under every projection — lives
+in one shared build-layer factory, `scripts/sources/environment/adapters/contourBands.ts` (per §3's
+projection-invariant-geometry rule); the `elevation` builder is a thin fetch over it.
+
+The second surface, **sea-surface temperature** (NOAA OISST, public domain), proves the encoding
+generalises: the same factory, a **sequential** threshold ramp instead of diverging, and the same two
+lines against a different variable. It cost two shared generalisations, not special cases: the factory
+now **masks no-data** (non-finite cells — SST's land — sit below the floor threshold, so they yield no
+band and render transparent, with no NaN vertices at coastlines), and `ScaleSpec.ramp` accepts a custom
+stop-list on **every** scale type (not just the diverging path), so SST carries a bespoke cold→warm
+palette. Both were the point of building the encoding right; climate surfaces follow for free.
+
+A surface (or `field`) dataset can be **month-resolved** (`Dataset.temporal: 'monthly'`): winds,
+currents, and SST are baked as 12 monthly-climatology snapshots (`<id>-MM.json`), and a global **month
+control** in the composer selects the active month, deep-linked in the URL hash. This is a temporal
+*selector*, not a fourth engine axis: the month resolves **app-side** into a concrete snapshot in
+`data-loaders.ts` before `buildLayers` hands `ResolvedLayer`s to the engine, so the render path stays
+view × channel × dataset, and only the shown month is fetched (lazy per binding). Raster surfaces stay
+deferred (they need the canvas/WebGL backend the SVG-only engine intentionally omits).
 
 ## 6. How to add a map
 
@@ -252,7 +266,10 @@ variable.
 - **A genuinely new display mode**: add a `Channel` row (`engine/channels.ts`) and, if it needs a new
   draw routine, a primitive under `engine/primitives/`. This is rare; M3 added the `field` primitive
   and drew both winds/currents (`field` channel) and the shipping-lane network (`lane` channel) through
-  it, and M5 added the `surface` primitive (scalar contour bands) for elevation and future scalar fields.
+  it, and M5 added the `surface` primitive (scalar contour bands) for elevation and sea-surface temperature.
+- **A month-resolved dataset**: no engine change. Set `Dataset.temporal: 'monthly'`, have the producer
+  write 12 `<id>-MM.json` snapshots, and the global month control + month-aware loader do the rest
+  (see §5).
 
 ## 7. Toolchain & delivery
 

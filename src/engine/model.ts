@@ -49,10 +49,12 @@ export type ScaleType = 'linear' | 'log' | 'quantile' | 'threshold' | 'sqrt'
 export type RampRef = string | string[]
 
 /**
- * A diverging colour descriptor: below and above a `pivot` value each get their own ramp, so
- * the ramp seam lands on the pivot regardless of asymmetric extents. Modular per side (sea
- * vs land for hypsometric relief); each side is a stock scheme or a custom stop-list. Applied
- * by the `threshold` scale (bands), which knows which buckets fall on each side of the pivot.
+ * A diverging colour descriptor: below and above a `pivot` value each get their own ramp. Modular
+ * per side (sea vs land for hypsometric relief); each side is a stock scheme or a custom stop-list.
+ * Applied by the `threshold` scale (bands), which knows which buckets fall on each side of the pivot,
+ * so the seam is insensitive to asymmetric extents. The seam lands exactly on the pivot only when the
+ * pivot is one of the threshold breakpoints (as it is for elevation: 0 ∈ HYPSOMETRIC_LEVELS);
+ * otherwise it falls on the nearest breakpoint.
  */
 export interface DivergingRamp {
   /** value the two ramps meet at (sea level for elevation). Default 0. */
@@ -63,8 +65,8 @@ export interface DivergingRamp {
 
 export interface ScaleSpec {
   type: ScaleType
-  /** color ramp (d3-scale-chromatic interpolator key); ignored by `sqrt`. */
-  ramp?: string
+  /** color ramp: a d3-scale-chromatic scheme name or an explicit CSS stop-list; ignored by `sqrt`. */
+  ramp?: RampRef
   /** explicit breakpoints for `threshold`; if unset, quantile-derived. */
   thresholds?: number[]
   /** diverging colour (threshold only): per-side ramps meeting at a pivot. Overrides `ramp`. */

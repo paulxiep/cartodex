@@ -23,6 +23,7 @@ import { buildLanes } from './sources/maritime/lanes'
 import { buildWinds } from './sources/environment/winds'
 import { buildCurrents } from './sources/environment/currents'
 import { buildElevation } from './sources/environment/elevation'
+import { buildSST } from './sources/environment/sst'
 import { buildEarthquakes } from './sources/hazards/earthquakes'
 import { buildVolcanoes } from './sources/hazards/volcanoes'
 import { buildPlates } from './sources/hazards/plates'
@@ -152,21 +153,28 @@ async function buildEnvironment(): Promise<void> {
     }
   } else console.log('  elevation: present, skipping (pnpm refresh-data to refresh)')
 
-  const fields: Array<{ name: string; build: () => Promise<{ features: unknown[] }> }> = [
-    { name: 'winds.json', build: buildWinds },
-    { name: 'currents.json', build: buildCurrents },
+  // Month-resolved climatologies: winds, currents, and SST each write 12 snapshots (<id>-MM.json),
+  // one per calendar month. The composer's month control picks which loads (lazy, one at a time). A
+  // month whose fetch fails keeps its existing snapshot; the min-feature guard matches the datasets.
+  const monthly: Array<{ id: string; min: number; build: (m: number) => Promise<{ features: unknown[] }> }> = [
+    { id: 'winds', min: 20, build: buildWinds },
+    { id: 'currents', min: 20, build: buildCurrents },
+    { id: 'sst', min: 8, build: buildSST },
   ]
-  for (const { name, build } of fields) {
-    if (!FORCE && present(name)) {
-      console.log(`  ${name}: present, skipping (pnpm refresh-data to refresh)`)
-      continue
-    }
-    try {
-      const fc = await build()
-      if (fc.features.length >= 20) write(name, fc)
-      else console.warn(`  ${name}: only ${fc.features.length} streamlines, kept existing`)
-    } catch (e) {
-      console.warn(`  ${name} skipped, kept existing: ${(e as Error).message}`)
+  for (const { id, min, build } of monthly) {
+    for (let m = 1; m <= 12; m++) {
+      const name = `${id}-${String(m).padStart(2, '0')}.json`
+      if (!FORCE && present(name)) {
+        console.log(`  ${name}: present, skipping (pnpm refresh-data to refresh)`)
+        continue
+      }
+      try {
+        const fc = await build(m)
+        if (fc.features.length >= min) write(name, fc)
+        else console.warn(`  ${name}: only ${fc.features.length} features, kept existing`)
+      } catch (e) {
+        console.warn(`  ${name} skipped, kept existing: ${(e as Error).message}`)
+      }
     }
   }
 }

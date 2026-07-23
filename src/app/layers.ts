@@ -57,9 +57,9 @@ async function resolveBase(bordersOnly = false): Promise<ResolvedLayer> {
 // Surface: a baked scalar field (elevation/bathymetry relief, heatmap) drawn as value-filled
 // contour bands. Single-occupancy background - drawn backmost so overlays (quakes, currents)
 // read above it. Colour comes from the dataset's scale (threshold + diverging sea/land ramp).
-async function resolveSurface(b: Binding): Promise<ResolvedLayer> {
+async function resolveSurface(b: Binding, month?: number): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
-  const d = await loadSurfaceData(ds)
+  const d = await loadSurfaceData(ds, month)
   return {
     id: `surface-${ds.id}`,
     primitive: 'surface',
@@ -203,9 +203,9 @@ async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> 
 
 // Field: baked streamlines (winds, currents), width by per-feature magnitude, coloured by the
 // dataset's identity ramp so multiple fields stay distinguishable.
-async function resolveField(b: Binding): Promise<ResolvedLayer> {
+async function resolveField(b: Binding, month?: number): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
-  const d = await loadLinesData(ds)
+  const d = await loadLinesData(ds, month)
   const color = ds.id === 'currents' ? 'rgba(90,200,190,0.75)' : 'rgba(240,150,90,0.8)'
   return {
     id: `field-${ds.id}`,
@@ -229,6 +229,7 @@ interface Task {
  */
 export async function buildLayers(
   bindings: Binding[],
+  month?: number,
 ): Promise<{ layers: ResolvedLayer[]; failed: Set<string> }> {
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
@@ -238,7 +239,7 @@ export async function buildLayers(
   // bubbles, markers. A surface fills the whole map, so it sits behind everything - and base
   // becomes borders-only over it, so country outlines read on top of the relief.
   const tasks: Task[] = []
-  if (surface) tasks.push({ keys: [bindingKey(surface)], run: () => resolveSurface(surface) })
+  if (surface) tasks.push({ keys: [bindingKey(surface)], run: () => resolveSurface(surface, month) })
   if (bindings.some((b) => b.channel === 'base')) {
     tasks.push({ keys: ['base'], run: () => resolveBase(surface != null) })
   }
@@ -256,7 +257,7 @@ export async function buildLayers(
     const keys = [choro, area].filter((b): b is Binding => b != null).map(bindingKey)
     tasks.push({ keys, run: () => resolveRegion(choro, area) })
   }
-  for (const b of bindings.filter((b) => b.channel === 'field')) tasks.push({ keys: [bindingKey(b)], run: () => resolveField(b) })
+  for (const b of bindings.filter((b) => b.channel === 'field')) tasks.push({ keys: [bindingKey(b)], run: () => resolveField(b, month) })
   for (const b of bindings.filter((b) => b.channel === 'arc')) tasks.push({ keys: [bindingKey(b)], run: () => resolveArc(b) })
   for (const b of bindings.filter((b) => b.channel === 'bubble')) tasks.push({ keys: [bindingKey(b)], run: () => resolveBubble(b) })
   // Marker bindings that share a snapshot (seaports by type) merge into one layer; different

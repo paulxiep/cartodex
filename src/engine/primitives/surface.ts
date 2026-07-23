@@ -40,6 +40,7 @@ export const surfaceRenderer: PrimitiveRenderer = {
       .on('pointermove', (e: PointerEvent, f) => {
         const v = valueOf(layer, f)
         if (v != null) showTooltip(v.toLocaleString(), e.clientX, e.clientY)
+        else hideTooltip() // clear over a no-data band rather than leaving the prior value up
       })
       .on('pointerleave', hideTooltip)
   },

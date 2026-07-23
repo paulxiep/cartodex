@@ -14,11 +14,13 @@ import type { Dataset } from './catalog'
 import { applySelection, normalizeSelection } from './taxonomy'
 import type { Taxonomy } from './taxonomy'
 import { PRESETS } from './presets'
-import { parseHash, toHash } from './state'
+import { parseHash, toHash, defaultMonth } from './state'
 import type { State } from './state'
 import { VERSION } from './version'
 
-const DEFAULT: State = { view: PRESETS[0]!.view, bindings: PRESETS[0]!.bindings }
+const DEFAULT: State = { view: PRESETS[0]!.view, bindings: PRESETS[0]!.bindings, month: PRESETS[0]!.month ?? defaultMonth() }
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
 // Channels whose multi-select is a hierarchy. The taxonomy processor (taxonomy.ts) does the work;
 // the composer just supplies the right taxonomy per channel (empty → flat multi-select).
@@ -117,6 +119,13 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     </aside>
     <main class="stage">
       <div id="map" class="map"></div>
+      <div id="month-control" class="month-control" hidden>
+        <button type="button" data-role="month-prev" aria-label="Previous month">◄</button>
+        <select data-role="month" aria-label="Month">
+          ${MONTH_NAMES.map((n, i) => `<option value="${i + 1}">${n}</option>`).join('')}
+        </select>
+        <button type="button" data-role="month-next" aria-label="Next month">►</button>
+      </div>
       <div id="loading" class="loading" hidden>Loading…</div>
       <footer id="attribution" class="attribution"></footer>
     </main>`
@@ -126,6 +135,8 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   const channelsEl = root.querySelector<HTMLDivElement>('#channels')!
   const loadingEl = root.querySelector<HTMLDivElement>('#loading')!
   const attrEl = root.querySelector<HTMLElement>('#attribution')!
+  const monthEl = root.querySelector<HTMLDivElement>('#month-control')!
+  const monthSel = monthEl.querySelector<HTMLSelectElement>('select[data-role="month"]')!
 
   let state = normalizeState(parseHash(location.hash, DEFAULT))
   let handle: MapHandle | null = null
@@ -158,6 +169,19 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
         input.addEventListener('change', () => toggleMulti(ch.id, input.value, input.checked)),
       )
     }
+  }
+
+  // Global month control (temporal axis): winds/currents/SST are baked per month, and this picks
+  // which loads. Only the shown month is fetched, so switching months lazy-loads one snapshot.
+  monthSel.addEventListener('change', (e) => setMonth(Number((e.target as HTMLSelectElement).value)))
+  monthEl.querySelector<HTMLButtonElement>('button[data-role="month-prev"]')!
+    .addEventListener('click', () => setMonth(state.month - 1))
+  monthEl.querySelector<HTMLButtonElement>('button[data-role="month-next"]')!
+    .addEventListener('click', () => setMonth(state.month + 1))
+
+  function setMonth(month: number): void {
+    state = { ...state, month: ((month - 1 + 12) % 12) + 1 } // wrap Dec↔Jan
+    void apply(false)
   }
 
   function othersOf(channel: string): Binding[] {
@@ -199,7 +223,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     const token = ++applyToken
     const active = renderable()
     loadingEl.hidden = false
-    const { layers, failed } = await buildLayers(active)
+    const { layers, failed } = await buildLayers(active, state.month)
     if (token !== applyToken) return // a newer apply superseded this one
     loadingEl.hidden = true
     unavailable.clear()
@@ -246,6 +270,11 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
         })
       }
     }
+    // Month control appears only when a temporal layer (winds/currents/SST) is bound and renderable.
+    const temporalActive = renderable().some((b) => DATASETS[b.dataset]?.temporal)
+    monthEl.hidden = !temporalActive
+    monthSel.value = String(state.month)
+
     const attrs = attributionsFor(renderable().filter((b) => DATASETS[b.dataset] || b.channel === 'base'))
     attrEl.textContent = attrs.length ? attrs.join('  ·  ') : ''
   }
