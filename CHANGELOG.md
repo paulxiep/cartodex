@@ -6,7 +6,8 @@ Changes to the maps you see and interact with, newest first. This project follow
 ## [0.1.3] - Unreleased
 
 A breadth pass on the same platform: new overlays across hazards, reference geography, and
-society, all riding the existing map channels. (Collects milestones M4 to M6.)
+society, plus scalar surfaces (elevation, sea-surface temperature) and a month control that
+walks winds, currents, and SST through the seasons. (Collects milestones M4 to M6.)
 
 ### Hazards
 - Earthquakes from USGS, sized by magnitude, in two layers: the strongest events of the last
@@ -30,10 +31,33 @@ society, all riding the existing map channels. (Collects milestones M4 to M6.)
   adult literacy, secondary enrolment, and research spending. Also added across existing
   themes: tourism arrivals, tax revenue, protected areas, under-5 mortality, and immunization.
 
+### Relief
+- A global elevation and bathymetry map: land height and ocean depth on one colour scale,
+  from deep-ocean blues through a green-to-brown-to-snow land ramp, from public-domain NOAA
+  ETOPO data. It reads as a complete relief-and-sea-floor picture in one layer.
+- Relief works as a backdrop under the other layers, so you can read earthquakes over the sea
+  floor, with country outlines drawn on top.
+- It covers the whole Earth with no seam, and works on every view: the flat maps, the
+  spin-and-zoom globe, and the polar map.
+
+### Sea-surface temperature
+- A global sea-surface temperature map: ocean heat as filled colour bands, from cold polar
+  water through the warm tropical pools, from NOAA's public-domain OISST record. Land stays
+  clear, so it reads as an ocean layer beneath the currents that move that heat.
+- A "SST & currents" pairing shows the temperature field with the surface currents over it.
+
+### Seasons (a month control)
+- Winds, ocean currents, and sea-surface temperature are now month by month. A month control on
+  the map steps through the year, so you can watch the monsoon winds reverse, the currents
+  shift, and the ocean warm and cool. Each month is a climatology: the typical field for that
+  month built from real data, not one day's weather.
+- Winds and currents, previously a single averaged field, now carry the full seasonal cycle.
+
 ### Data and sources
 - New sources: USGS earthquakes, NOAA volcanoes, tectonic plate boundaries (Bird 2003),
-  Natural Earth cities and rivers, OpenStreetMap submarine cables, and more World Bank
-  indicators. Each active layer shows its source and licence.
+  Natural Earth cities and rivers, OpenStreetMap submarine cables, NOAA ETOPO relief, NOAA OISST
+  sea-surface temperature, and more World Bank indicators. Each active layer shows its source and
+  licence.
 
 ## [0.1.1] - 2026-07-03
 

@@ -4,7 +4,7 @@
 > by hand; edit the catalog and regenerate. Every baked snapshot is an open-licensed source,
 > normalised and re-hosted; the in-app attribution string carries the same credit.
 
-63 datasets across 9 domains.
+65 datasets across 9 domains.
 
 ### Demographics
 
@@ -103,6 +103,8 @@
 |---|---|---|---|
 | Surface winds | `grid` | FNMOC via NOAA CoastWatch ERDDAP | Public domain (US Gov) |
 | Ocean currents | `grid` | Aviso via NOAA CoastWatch ERDDAP | Aviso+ altimetry (attribution) |
+| Sea-surface temperature | `surface` | NOAA OISST v2.1 via NOAA ERDDAP | Public domain (US Gov) |
+| Elevation & bathymetry | `surface` | NOAA NGDC (ETOPO1) via NOAA CoastWatch ERDDAP | Public domain (US Gov) |
 | Rivers & lakes | `lines` | Natural Earth | Public domain |
 
 ### Hazards

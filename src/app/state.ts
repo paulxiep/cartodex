@@ -12,7 +12,13 @@ import type { Binding } from './layers'
 export interface State {
   view: ViewId
   bindings: Binding[]
+  /** active month (1-12) for temporal datasets (winds/currents/SST); ignored by the rest. */
+  month: number
 }
+
+/** Default month when neither the hash nor a preset pins one: the current calendar month, so a
+ *  temporal map opens seasonally relevant. */
+export const defaultMonth = (): number => new Date().getMonth() + 1
 
 export function toHash(state: State): string {
   const parts = [`view=${state.view}`]
@@ -28,6 +34,8 @@ export function toHash(state: State): string {
         : list.map((b) => (b.scale ? `${b.dataset}:${b.scale}` : b.dataset)).join(',')
     parts.push(`${channel}=${value}`)
   }
+  // Encode the month only when a temporal layer is bound, so non-temporal maps keep clean, stable hashes.
+  if (state.bindings.some((b) => DATASETS[b.dataset]?.temporal)) parts.push(`month=${state.month}`)
   return `#${parts.join('&')}`
 }
 
@@ -35,6 +43,9 @@ export function parseHash(hash: string, fallback: State): State {
   const params = new URLSearchParams(hash.replace(/^#/, ''))
   const viewRaw = params.get('view')
   const view = VIEW_LIST.some((v) => v.id === viewRaw) ? (viewRaw as ViewId) : fallback.view
+
+  const monthRaw = Number(params.get('month'))
+  const month = Number.isInteger(monthRaw) && monthRaw >= 1 && monthRaw <= 12 ? monthRaw : fallback.month
 
   const bindings: Binding[] = []
   for (const channel of CHANNEL_LIST) {
@@ -53,5 +64,5 @@ export function parseHash(hash: string, fallback: State): State {
       bindings.push({ channel: channel.id, dataset: ds.id, ...(scale ? { scale: scale as ScaleType } : {}) })
     }
   }
-  return bindings.length ? { view, bindings } : fallback
+  return bindings.length ? { view, bindings, month } : fallback
 }

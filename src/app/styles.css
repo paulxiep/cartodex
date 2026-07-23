@@ -169,6 +169,45 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
   pointer-events: none;
 }
 
+/* ── Month control (temporal axis: winds/currents/SST) ─────── */
+.month-control {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: rgba(17, 21, 28, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.month-control[hidden] { display: none; }
+.month-control button {
+  cursor: pointer;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  font-size: 12px;
+}
+.month-control button:hover { color: var(--accent); }
+.month-control select {
+  min-width: 110px;
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.month-control select option { color: var(--ink); background: var(--panel); }
+
 @media (max-width: 720px) {
   .composer { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .panel { border-right: none; border-bottom: 1px solid var(--line); }

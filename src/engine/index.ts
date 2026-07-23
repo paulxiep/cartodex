@@ -22,6 +22,8 @@ export type {
   DatasetKind,
   ScaleType,
   ScaleSpec,
+  RampRef,
+  DivergingRamp,
   ViewKind,
   ViewId,
   View,

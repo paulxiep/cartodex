@@ -1,15 +1,21 @@
-// Winds builder: real FNMOC 10 m surface winds (NOAA ERDDAP, monthly) averaged over a set of
-// months into a mean (u,v) field, then integrated into streamlines. The producer emits a
-// FeatureCollection of LineStrings with a per-feature `magnitude` (mean wind speed, m/s), which
-// the `field` channel draws with width by magnitude.
+// Winds builder: real FNMOC 10 m surface winds (NOAA ERDDAP, monthly), built per calendar month as
+// a climatology - the mean of that month across a set of recent years - then integrated into
+// streamlines. The producer emits a FeatureCollection of LineStrings with a per-feature `magnitude`
+// (mean wind speed, m/s), which the `field` channel draws with width by magnitude. Month-resolved so
+// the composer's month control can show the seasonal circulation (monsoon reversal, roaring forties).
 
 import type { FeatureCollection } from 'geojson'
 import { fetchErddapVectorGrid } from './adapters/erddapGrid'
 import { integrateStreamlines } from './streamlines'
 
 const ERDDAP = 'https://coastwatch.pfeg.noaa.gov/erddap'
+// Recent years averaged per month into the climatology; a missing year/month is skipped (the fetch
+// tolerates it) so the mean is over the months that returned. Verify-at-build knob.
+const YEARS = [2018, 2019, 2020, 2021, 2022]
 
-export async function buildWinds(): Promise<FeatureCollection> {
+const mm = (m: number): string => String(m).padStart(2, '0')
+
+export async function buildWinds(month: number): Promise<FeatureCollection> {
   const grid = await fetchErddapVectorGrid({
     base: ERDDAP,
     datasetId: 'erdlasFnWind10_LonPM180',
@@ -18,9 +24,9 @@ export async function buildWinds(): Promise<FeatureCollection> {
     lat: [-90, 90],
     lon: [-180, 179],
     stride: 2, // 1° native → ~2° sampling
-    times: ['2021-01-16', '2021-04-16', '2021-07-16', '2021-10-16'],
+    times: YEARS.map((y) => `${y}-${mm(month)}-16`),
   })
   const lines = integrateStreamlines(grid, { sepDeg: 4, stepDeg: 1.2, maxSteps: 16, minSpeed: 1.0, maxLines: 550 })
-  console.log(`  winds: ${lines.length} streamlines (FNMOC 10 m winds, mean field)`)
+  console.log(`  winds ${mm(month)}: ${lines.length} streamlines (FNMOC 10 m winds, monthly climatology)`)
   return { type: 'FeatureCollection', features: lines }
 }

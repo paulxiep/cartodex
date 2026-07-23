@@ -34,6 +34,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/d3-array": "^3.2.2",
+    "@types/d3-contour": "^3.0.6",
     "@types/d3-drag": "^3.0.7",
     "@types/d3-geo": "^3.1.0",
     "@types/d3-scale": "^4.0.9",
@@ -44,6 +45,7 @@
     "@types/node": "^26.0.1",
     "@types/topojson-client": "^3.1.5",
     "@types/topojson-specification": "^1.0.5",
+    "d3-contour": "^4.0.2",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "lerc": "^4.1.1",
