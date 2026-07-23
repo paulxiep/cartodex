@@ -53,7 +53,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 
 ## Current state
 
-**M0 scaffold, M1 country fundamentals, M2 platform architecture, and M3 maritime & environmental complete.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, and wind/current fields ride the same platform.
+**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, and world cities ride the same platform.
 
 **M0 — Scaffold** laid the engine: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that emits id-keyed snapshots. First data: World Bank population and OpenFlights airports + routes.
 
@@ -77,6 +77,13 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Real shipping lanes** — the observed global shipping-lane network (newzealandpaul/Shipping-Lanes, CC BY-SA) drawn as a subtle context layer on a new `lane` channel. Not a computed shortest path or great circle: the corridors ships actually use, shaped by the winds and currents shown beside them.
 - **Winds and currents** — surface winds (FNMOC) and ocean surface currents (Aviso), real gridded fields fetched via NOAA ERDDAP and integrated at build time into streamlines on a new `field` channel, coloured by layer and sized by magnitude.
 
+**M4 — Overlay breadth** is a datasets-and-producers-only pass with **zero engine change**: new layers ride the existing `marker`, `lane`, and `choropleth` channels.
+
+- **Hazards** — global seismicity (USGS FDSN, recent significant + great historic quakes), volcanoes (NOAA NCEI), and the tectonic plate boundaries they trace (fraxen/tectonicplates, Bird 2003, ODC-BY) — composable overlays, not a one-off image. The "Ring of Fire" preset reads the seismic belt tracing the boundaries.
+- **Reference geography** — the world's largest cities (Natural Earth, sized by population) and the river + lake-centerline network (Natural Earth, major rivers drawn wider by rank on the `lane` channel).
+- **Submarine cables** — the other network under the sea, from OpenStreetMap (ODbL) via Overpass. TeleGeography was rejected as CC BY-NC-SA (non-commercial); OSM coverage is thinner but permissive, and a build guard ships only what OSM actually has.
+- **Society domain** — a batch of new World Bank indicators (internet users, mobile subscriptions, literacy, secondary enrolment, R&D spending, tourism, tax revenue, protected areas, child mortality, immunization) as pure config rows, under a new `society` domain.
+
 Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
 
 Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade relations, and the contiguous cartogram.
@@ -89,6 +96,7 @@ Not wired: detailed energy mix and emissions, agricultural production volumes, m
 | **M1 — Country fundamentals** | ~30 World Bank indicators (demographics · economy · resources · health) as themed `region` choropleths from a declarative catalog; data decoupled from the build (scheduled producer → private storage, read same-origin); interaction state preserved across layer toggles | Done |
 | **M2 — Platform architecture** | dataset × channel × scale model; display-mode channels + per-channel composer (bivariate maps); scale engine (log/quantile/threshold colour, sqrt size) fixing magnitude skew; `region-symbol` bubble layer; area-channel colored cartogram; domain-neutral catalog + generated `DATA_SOURCES.md` + weight-budget report | Done |
 | **M3 — Maritime & environmental** | seaports sized by real AIS traffic (WPI ∪ IMF PortWatch); the real shipping-lane network on a `lane` channel; surface winds and ocean currents (FNMOC, Aviso via NOAA ERDDAP) as streamlines on a new `field` channel | Done |
+| **M4 — Overlay breadth** | hazards (USGS earthquakes, NOAA volcanoes, plate boundaries); reference geography (Natural Earth cities + rivers); submarine cables (OSM/ODbL); a `society` domain of new World Bank indicators — all on existing channels, zero engine change | Done |
 
 Later milestones are refined here as work is defined.
 

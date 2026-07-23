@@ -3,6 +3,38 @@
 Changes to the maps you see and interact with, newest first. This project follows
 [Semantic Versioning](https://semver.org).
 
+## [0.1.3] - Unreleased
+
+A breadth pass on the same platform: new overlays across hazards, reference geography, and
+society, all riding the existing map channels. (Collects milestones M4 to M6.)
+
+### Hazards
+- Earthquakes from USGS, sized by magnitude, in two layers: the strongest events of the last
+  two years (a live "where the ground is moving now" map) and the great quakes of the
+  instrumental record (magnitude 7 and up since 1900).
+- Volcanoes from NOAA, sized by summit elevation.
+- Tectonic plate boundaries as a context network, the lines the quakes and volcanoes trace.
+- A "Ring of Fire" pairing of earthquakes, volcanoes, and plate boundaries, on the flat map
+  and the globe.
+
+### Reference geography
+- The world's largest cities, sized by population (Natural Earth).
+- Rivers and lake centerlines as a network, with major rivers drawn wider than minor ones.
+
+### Maritime
+- Submarine communications cables, the other network under the sea, drawn alongside the
+  shipping lanes (OpenStreetMap).
+
+### Society
+- New World Bank indicators under a new Society theme: internet users, mobile subscriptions,
+  adult literacy, secondary enrolment, and research spending. Also added across existing
+  themes: tourism arrivals, tax revenue, protected areas, under-5 mortality, and immunization.
+
+### Data and sources
+- New sources: USGS earthquakes, NOAA volcanoes, tectonic plate boundaries (Bird 2003),
+  Natural Earth cities and rivers, OpenStreetMap submarine cables, and more World Bank
+  indicators. Each active layer shows its source and licence.
+
 ## [0.1.1] - 2026-07-03
 
 The platform changes that let several datasets share one map, plus two new data

@@ -9,32 +9,11 @@
 // and near-duplicate vertices dropped, to fit the per-snapshot weight budget.
 
 import type { Feature, FeatureCollection, LineString, MultiLineString, Position } from 'geojson'
-import { getJson } from '../_shared'
+import { getJson, simplify } from '../_shared'
 import { sampleLaneDensities } from './adapters/aisDensity'
 
 const LANES_URL =
   'https://raw.githubusercontent.com/newzealandpaul/Shipping-Lanes/main/data/Shipping_Lanes_v1.geojson'
-
-// Drop a vertex closer than this (degrees) to the last kept one - decimates the dense source
-// without visibly changing an ocean-scale lane.
-const MIN_STEP_DEG = 0.25
-
-const q2 = (n: number): number => Number(n.toFixed(2))
-
-/** Quantize + decimate one line; always keeps the first and last vertex. */
-function simplify(coords: Position[]): Position[] {
-  const out: Position[] = []
-  let last: Position | null = null
-  for (let i = 0; i < coords.length; i++) {
-    const p: Position = [q2(coords[i]![0]!), q2(coords[i]![1]!)]
-    const isEnd = i === 0 || i === coords.length - 1
-    if (isEnd || !last || Math.abs(p[0]! - last[0]!) + Math.abs(p[1]! - last[1]!) >= MIN_STEP_DEG) {
-      out.push(p)
-      last = p
-    }
-  }
-  return out
-}
 
 export async function buildLanes(): Promise<FeatureCollection> {
   const raw = await getJson<FeatureCollection>(LANES_URL)
