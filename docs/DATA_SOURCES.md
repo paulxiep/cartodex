@@ -4,7 +4,7 @@
 > by hand; edit the catalog and regenerate. Every baked snapshot is an open-licensed source,
 > normalised and re-hosted; the in-app attribution string carries the same credit.
 
-46 datasets across 7 domains.
+63 datasets across 9 domains.
 
 ### Demographics
 
@@ -18,6 +18,7 @@
 | Urban population (%) | `region` | World Bank WDI | CC-BY 4.0 |
 | Infant mortality (per 1k births) | `region` | World Bank WDI | CC-BY 4.0 |
 | Net migration | `region` | World Bank WDI | CC-BY 4.0 |
+| World cities | `point` | Natural Earth | Public domain |
 
 ### Economy
 
@@ -32,6 +33,18 @@
 | Unemployment (%) | `region` | World Bank WDI | CC-BY 4.0 |
 | Gini index | `region` | World Bank WDI | CC-BY 4.0 |
 | Exports (% of GDP) | `region` | World Bank WDI | CC-BY 4.0 |
+| Tourism arrivals | `region` | World Bank WDI | CC-BY 4.0 |
+| Tax revenue (% of GDP) | `region` | World Bank WDI | CC-BY 4.0 |
+
+### Society
+
+| Dataset | Kind | Provider | Licence |
+|---|---|---|---|
+| Internet users (%) | `region` | World Bank WDI | CC-BY 4.0 |
+| Mobile subscriptions (per 100) | `region` | World Bank WDI | CC-BY 4.0 |
+| Adult literacy (%) | `region` | World Bank WDI | CC-BY 4.0 |
+| Secondary enrolment (% gross) | `region` | World Bank WDI | CC-BY 4.0 |
+| R&D spending (% of GDP) | `region` | World Bank WDI | CC-BY 4.0 |
 
 ### Resources & environment
 
@@ -46,6 +59,7 @@
 | Energy use per capita (kg oil eq) | `region` | World Bank WDI | CC-BY 4.0 |
 | Renewable freshwater per capita (m³) | `region` | World Bank WDI | CC-BY 4.0 |
 | Land area (km²) | `region` | World Bank WDI | CC-BY 4.0 |
+| Terrestrial protected areas (%) | `region` | World Bank WDI | CC-BY 4.0 |
 
 ### Health
 
@@ -54,6 +68,8 @@
 | Health spending (% of GDP) | `region` | World Bank WDI | CC-BY 4.0 |
 | Physicians (per 1k) | `region` | World Bank WDI | CC-BY 4.0 |
 | Hospital beds (per 1k) | `region` | World Bank WDI | CC-BY 4.0 |
+| Under-5 mortality (per 1k) | `region` | World Bank WDI | CC-BY 4.0 |
+| DPT immunization (% of children) | `region` | World Bank WDI | CC-BY 4.0 |
 
 ### Transport
 
@@ -79,6 +95,7 @@
 | Passenger | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
 | Leisure | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
 | Fishing | `lines` | Shipping-Lanes + Global Ship Density | CC BY-SA 4.0 (lanes) · CC BY 4.0 (density) |
+| Submarine cables | `lines` | OpenStreetMap | ODbL |
 
 ### Environment
 
@@ -86,4 +103,14 @@
 |---|---|---|---|
 | Surface winds | `grid` | FNMOC via NOAA CoastWatch ERDDAP | Public domain (US Gov) |
 | Ocean currents | `grid` | Aviso via NOAA CoastWatch ERDDAP | Aviso+ altimetry (attribution) |
+| Rivers & lakes | `lines` | Natural Earth | Public domain |
+
+### Hazards
+
+| Dataset | Kind | Provider | Licence |
+|---|---|---|---|
+| Earthquakes (recent, significant) | `point` | USGS | Public domain (US Gov) |
+| Earthquakes (great, since 1900) | `point` | USGS | Public domain (US Gov) |
+| Volcanoes | `point` | NOAA NCEI | Public domain (US Gov) |
+| Tectonic plate boundaries | `lines` | fraxen/tectonicplates (Bird 2003) | ODC-BY 1.0 |
 

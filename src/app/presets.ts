@@ -108,6 +108,82 @@ export const PRESETS: Preset[] = [
       { channel: 'marker', dataset: 'ports' },
     ],
   },
+  {
+    id: 'ring-of-fire',
+    label: 'Ring of Fire',
+    description: 'Recent significant earthquakes and volcanoes tracing the tectonic plate boundaries.',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'plate-boundaries' },
+      { channel: 'marker', dataset: 'quakes-recent' },
+      { channel: 'marker', dataset: 'volcanoes' },
+    ],
+  },
+  {
+    id: 'ring-of-fire-globe',
+    label: 'Ring of Fire (globe)',
+    description: 'The seismic belt, volcanoes and plate boundaries on a spin-and-zoom globe.',
+    view: 'orthographic',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'plate-boundaries' },
+      { channel: 'marker', dataset: 'quakes-recent' },
+      { channel: 'marker', dataset: 'volcanoes' },
+    ],
+  },
+  {
+    id: 'great-earthquakes',
+    label: 'Great earthquakes',
+    description: 'The great quakes of the instrumental record (M 7+ since 1900) on a spin-and-zoom globe.',
+    view: 'orthographic',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'marker', dataset: 'quakes-historic' },
+    ],
+  },
+  {
+    id: 'world-cities',
+    label: 'World cities',
+    description: 'The largest cities worldwide, sized by population (Natural Earth).',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'marker', dataset: 'cities' },
+    ],
+  },
+  {
+    id: 'cities-rivers',
+    label: 'Cities & rivers',
+    description: 'The largest cities over the world river network — major rivers drawn wider (Natural Earth).',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'rivers' },
+      { channel: 'marker', dataset: 'cities' },
+    ],
+  },
+  {
+    id: 'cables-lanes',
+    label: 'Cables & shipping lanes',
+    description: 'The two undersea networks together: submarine cables (OSM) over the real shipping lanes.',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'lane', dataset: 'shipping' },
+      { channel: 'lane', dataset: 'cables' },
+    ],
+  },
+  {
+    id: 'connected-world',
+    label: 'Connected world',
+    description: 'Internet users as a share of population on a spin-and-zoom globe (World Bank).',
+    view: 'orthographic',
+    bindings: [
+      { channel: 'base', dataset: 'land' },
+      { channel: 'choropleth', dataset: 'internet-users' },
+    ],
+  },
 ]
 
 export function presetHash(p: Preset): string {

@@ -1,7 +1,10 @@
-// Shared producer helpers: network fetch with retry, a quote-aware CSV parser, and the
-// ISO-3166 alpha-3 -> numeric crosswalk that joins source rows to the world-atlas
-// geometry ids. Each source builder (worldbank, openflights, ...) imports from here and
-// returns a normalized snapshot; scripts/build-data.ts orchestrates and writes.
+// Shared producer helpers: network fetch with retry, a quote-aware CSV parser, the ISO-3166
+// alpha-3 -> numeric crosswalk that joins source rows to the world-atlas geometry ids, and the
+// line quantize/decimate used by the `lines` producers (shipping lanes, plate boundaries). Each
+// source builder (worldbank, openflights, lanes, plates, ...) imports from here and returns a
+// normalized snapshot; scripts/build-data.ts orchestrates and writes.
+
+import type { Position } from 'geojson'
 
 const ISO_URL =
   'https://raw.githubusercontent.com/lukes/ISO-3166-Countries-with-Regional-Codes/master/all/all.json'
@@ -73,4 +76,28 @@ export async function loadA3ToNum(): Promise<Map<string, string>> {
     if (a3 && num) a3ToNum.set(a3, num)
   }
   return a3ToNum
+}
+
+// ── Line geometry: quantize + decimate to the per-snapshot weight budget ────────────────────
+// Shared by the `lines` producers (shipping lanes, plate boundaries): a 2 dp quantize (~1 km,
+// fine at ocean scale) plus dropping near-duplicate vertices shrinks a dense source polyline
+// without visibly changing an ocean-scale path.
+
+/** Quantize a coordinate to 2 decimal places (~1 km). */
+export const q2 = (n: number): number => Number(n.toFixed(2))
+
+/** Quantize + decimate one polyline: drop a vertex closer than `minStepDeg` (Manhattan degrees)
+ *  to the last kept one, always keeping the first and last vertex. */
+export function simplify(coords: Position[], minStepDeg = 0.25): Position[] {
+  const out: Position[] = []
+  let last: Position | null = null
+  for (let i = 0; i < coords.length; i++) {
+    const p: Position = [q2(coords[i]![0]!), q2(coords[i]![1]!)]
+    const isEnd = i === 0 || i === coords.length - 1
+    if (isEnd || !last || Math.abs(p[0]! - last[0]!) + Math.abs(p[1]! - last[1]!) >= minStepDeg) {
+      out.push(p)
+      last = p
+    }
+  }
+  return out
 }

@@ -145,21 +145,32 @@ function topmostDatasets(bindings: Binding[], tax: Taxonomy): Dataset[] {
   return bindings.filter((b) => top.has(b.dataset)).map((b) => DATASETS[b.dataset]).filter((d): d is Dataset => !!d)
 }
 
-// All selected lane layers share one geometry, so they merge into ONE layer (summed over the
-// union of the top-most selected leaf fields) - drawn once, no duplicate overlapping paths.
+// Submarine cables take a contrasting signal-amber so they read against the sea-blue shipping/river
+// water networks when overlaid (the "two undersea networks" preset); mirrors how the field resolver
+// tones winds vs currents.
+const CABLE_AMBER = 'rgba(240,175,90,0.85)'
+
+// One lane layer per SNAPSHOT: datasets that share a snapshot (shipping by ship type) merge into one
+// geometry (summed over the union of the top-most selected leaf fields, drawn once); different
+// snapshots (shipping vs cables vs rivers) are distinct networks resolved separately. Grouped by
+// snapshot upstream in buildLayers, so each network is drawn from its own file and keeps its tone.
 async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> {
   const datasets = topmostDatasets(bindings, LANE_TAXONOMY)
   if (!datasets.length) return null
   const d = await loadLinesMerged(datasets)
   const weighted = d.values.size > 0
+  const cable = datasets[0]!.id === 'cables'
+  const stroke = cable
+    ? weighted ? CABLE_AMBER : 'rgba(240,175,90,0.6)'
+    : weighted ? SEA_BLUE : 'rgba(120,150,190,0.32)'
   return {
-    id: 'lane',
+    id: `lane-${snapshotKey(datasets[0]!)}`,
     primitive: 'field',
     features: d.features,
     values: d.values,
     valueDomain: d.domain,
     style: {
-      stroke: weighted ? SEA_BLUE : 'rgba(120,150,190,0.32)',
+      stroke,
       widthRange: weighted ? [0.4, 3] : [0.5, 0.5],
       opacity: weighted ? 0.75 : 0.5,
     },
@@ -201,8 +212,16 @@ export async function buildLayers(
   // Draw order (back to front): base, lanes (background), region, field, arcs, bubbles, markers.
   const tasks: Task[] = []
   if (bindings.some((b) => b.channel === 'base')) tasks.push({ keys: ['base'], run: resolveBase })
-  const laneBindings = bindings.filter((b) => b.channel === 'lane')
-  if (laneBindings.length) tasks.push({ keys: laneBindings.map(bindingKey), run: () => resolveLanes(laneBindings) })
+  // Lane bindings that share a snapshot (shipping by ship type) merge into one layer; different
+  // snapshots (shipping vs cables vs rivers) stay separate networks, each drawn from its own file.
+  const laneGroups = new Map<string, Binding[]>()
+  for (const b of bindings.filter((b) => b.channel === 'lane')) {
+    const ds = DATASETS[b.dataset]
+    if (!ds) continue
+    const key = snapshotKey(ds)
+    ;(laneGroups.get(key) ?? laneGroups.set(key, []).get(key)!).push(b)
+  }
+  for (const group of laneGroups.values()) tasks.push({ keys: group.map(bindingKey), run: () => resolveLanes(group) })
   if (choro || area) {
     const keys = [choro, area].filter((b): b is Binding => b != null).map(bindingKey)
     tasks.push({ keys, run: () => resolveRegion(choro, area) })

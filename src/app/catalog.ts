@@ -14,34 +14,41 @@
 import type { DatasetKind, ScaleType } from '../engine/model'
 import type { Taxonomy } from './taxonomy'
 
-/** Thematic grouping for the composer. Open taxonomy: maritime/environment land in M3. */
+/** Thematic grouping for the composer. Open taxonomy: maritime/environment land in M3,
+ *  hazards in M4. */
 export type DomainId =
   | 'demographics'
   | 'economy'
+  | 'society'
   | 'resources'
   | 'health'
   | 'transport'
   | 'maritime'
   | 'environment'
+  | 'hazards'
 
 export const DOMAIN_ORDER: DomainId[] = [
   'demographics',
   'economy',
+  'society',
   'resources',
   'health',
   'transport',
   'maritime',
   'environment',
+  'hazards',
 ]
 
 export const DOMAIN_LABELS: Record<DomainId, string> = {
   demographics: 'Demographics',
   economy: 'Economy',
+  society: 'Society',
   resources: 'Resources & environment',
   health: 'Health',
   transport: 'Transport',
   maritime: 'Maritime',
   environment: 'Environment',
+  hazards: 'Hazards',
 }
 
 export type DataSource =
@@ -105,6 +112,15 @@ export const WDI_INDICATORS: WdiIndicator[] = [
   { id: 'unemployment', label: 'Unemployment (%)', code: 'SL.UEM.TOTL.ZS', domain: 'economy', ramp: 'OrRd' },
   { id: 'gini', label: 'Gini index', code: 'SI.POV.GINI', domain: 'economy', ramp: 'YlOrRd' },
   { id: 'exports-pct-gdp', label: 'Exports (% of GDP)', code: 'NE.EXP.GNFS.ZS', domain: 'economy', ramp: 'BuGn' },
+  { id: 'tourism-arrivals', label: 'Tourism arrivals', code: 'ST.INT.ARVL', domain: 'economy', ramp: 'YlOrBr', scale: 'log' },
+  { id: 'tax-revenue', label: 'Tax revenue (% of GDP)', code: 'GC.TAX.TOTL.GD.ZS', domain: 'economy', ramp: 'BuGn' },
+
+  // ── Society (connectivity, education, research) ───────────────────────────────────
+  { id: 'internet-users', label: 'Internet users (%)', code: 'IT.NET.USER.ZS', domain: 'society', ramp: 'GnBu' },
+  { id: 'mobile-subs', label: 'Mobile subscriptions (per 100)', code: 'IT.CEL.SETS.P2', domain: 'society', ramp: 'BuPu' },
+  { id: 'literacy', label: 'Adult literacy (%)', code: 'SE.ADT.LITR.ZS', domain: 'society', ramp: 'YlGn' },
+  { id: 'secondary-enrolment', label: 'Secondary enrolment (% gross)', code: 'SE.SEC.ENRR', domain: 'society', ramp: 'YlGnBu' },
+  { id: 'rnd-spend', label: 'R&D spending (% of GDP)', code: 'GB.XPD.RSDV.GD.ZS', domain: 'society', ramp: 'Purples' },
 
   // ── Resources / environment ─────────────────────────────────────────────────────
   { id: 'co2-per-capita', label: 'CO₂ per capita (t)', code: 'EN.GHG.CO2.PC.CE.AR5', domain: 'resources', ramp: 'OrRd' },
@@ -116,11 +132,14 @@ export const WDI_INDICATORS: WdiIndicator[] = [
   { id: 'energy-use', label: 'Energy use per capita (kg oil eq)', code: 'EG.USE.PCAP.KG.OE', domain: 'resources', ramp: 'OrRd', scale: 'log' },
   { id: 'freshwater-per-capita', label: 'Renewable freshwater per capita (m³)', code: 'ER.H2O.INTR.PC', domain: 'resources', ramp: 'PuBu', scale: 'log' },
   { id: 'land-area', label: 'Land area (km²)', code: 'AG.LND.TOTL.K2', domain: 'resources', ramp: 'BuGn', scale: 'quantile' },
+  { id: 'protected-areas', label: 'Terrestrial protected areas (%)', code: 'ER.LND.PTLD.ZS', domain: 'resources', ramp: 'BuGn' },
 
   // ── Health ──────────────────────────────────────────────────────────────────────
   { id: 'health-spend-pct-gdp', label: 'Health spending (% of GDP)', code: 'SH.XPD.CHEX.GD.ZS', domain: 'health', ramp: 'RdPu' },
   { id: 'physicians', label: 'Physicians (per 1k)', code: 'SH.MED.PHYS.ZS', domain: 'health', ramp: 'RdYlGn' },
   { id: 'hospital-beds', label: 'Hospital beds (per 1k)', code: 'SH.MED.BEDS.ZS', domain: 'health', ramp: 'RdYlGn' },
+  { id: 'under5-mortality', label: 'Under-5 mortality (per 1k)', code: 'SH.DYN.MORT', domain: 'health', ramp: 'OrRd' },
+  { id: 'dpt-immunization', label: 'DPT immunization (% of children)', code: 'SH.IMM.IDPT', domain: 'health', ramp: 'YlGn' },
 ]
 
 function wdiDataset(ind: WdiIndicator): Dataset {
@@ -261,6 +280,81 @@ export const DATASETS: Record<string, Dataset> = {
     license: 'Aviso+ altimetry (attribution)',
     attribution: 'Currents: Aviso geostrophic surface currents via NOAA CoastWatch ERDDAP — mean field, streamlines',
     defaultRamp: 'PuBuGn',
+  },
+  // ── Hazards (M4): earthquakes, volcanoes, plate boundaries ──────────────────────────────
+  'quakes-recent': {
+    id: 'quakes-recent',
+    label: 'Earthquakes (recent, significant)',
+    kind: 'point',
+    domain: 'hazards',
+    source: { mode: 'baked', snapshot: 'quakes-recent.json' },
+    provider: 'USGS',
+    license: 'Public domain (US Gov)',
+    attribution: 'Earthquakes: USGS FDSN event catalog (public domain); strongest events in a rolling 24-month window, sized by magnitude',
+  },
+  'quakes-historic': {
+    id: 'quakes-historic',
+    label: 'Earthquakes (great, since 1900)',
+    kind: 'point',
+    domain: 'hazards',
+    source: { mode: 'baked', snapshot: 'quakes-historic.json' },
+    provider: 'USGS',
+    license: 'Public domain (US Gov)',
+    attribution: 'Earthquakes: USGS FDSN event catalog (public domain); M 7+ since 1900, sized by magnitude',
+  },
+  volcanoes: {
+    id: 'volcanoes',
+    label: 'Volcanoes',
+    kind: 'point',
+    domain: 'hazards',
+    source: { mode: 'baked', snapshot: 'volcanoes.json' },
+    provider: 'NOAA NCEI',
+    license: 'Public domain (US Gov)',
+    attribution: 'Volcanoes: NOAA NCEI Significant Volcanic Eruptions (public domain); sized by summit elevation',
+  },
+  'plate-boundaries': {
+    id: 'plate-boundaries',
+    label: 'Tectonic plate boundaries',
+    kind: 'lines',
+    domain: 'hazards',
+    source: { mode: 'baked', snapshot: 'plate-boundaries.json' },
+    provider: 'fraxen/tectonicplates (Bird 2003)',
+    license: 'ODC-BY 1.0',
+    attribution: 'Plate boundaries: Hugo Ahlenius / Nordpil / Peter Bird, tectonicplates (ODC-BY 1.0); data from Bird (2003)',
+  },
+  // ── Reference geography (M4): cities, rivers ─────────────────────────────────────────────
+  cities: {
+    id: 'cities',
+    label: 'World cities',
+    kind: 'point',
+    domain: 'demographics',
+    source: { mode: 'baked', snapshot: 'cities.json' },
+    provider: 'Natural Earth',
+    license: 'Public domain',
+    attribution: 'Cities: Natural Earth populated places (public domain); largest by population, sized by max population',
+  },
+  rivers: {
+    id: 'rivers',
+    label: 'Rivers & lakes',
+    kind: 'lines',
+    domain: 'environment',
+    source: { mode: 'baked', snapshot: 'rivers.json' },
+    provider: 'Natural Earth',
+    license: 'Public domain',
+    attribution: 'Rivers & lakes: Natural Earth 50m rivers + lake centerlines (public domain); major rivers drawn wider by Natural Earth rank',
+    // Per-feature inverted scalerank drives lane width (major rivers wider); see buildRivers.
+    valueFields: ['rank'],
+  },
+  // ── Submarine cables (M4, maritime): the other network under the sea ─────────────────────
+  cables: {
+    id: 'cables',
+    label: 'Submarine cables',
+    kind: 'lines',
+    domain: 'maritime',
+    source: { mode: 'baked', snapshot: 'cables.json' },
+    provider: 'OpenStreetMap',
+    license: 'ODbL',
+    attribution: 'Submarine cables: © OpenStreetMap contributors (ODbL) via Overpass',
   },
 }
 

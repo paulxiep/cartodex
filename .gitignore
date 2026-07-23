@@ -34,3 +34,6 @@ public/data/
 /Makefile
 /deploy/
 /wrangler.toml
+
+# Root-level scratch scripts (one-off data pokes) are working notes, not project code.
+/*.py

@@ -22,6 +22,11 @@ import { buildPorts } from './sources/maritime/ports'
 import { buildLanes } from './sources/maritime/lanes'
 import { buildWinds } from './sources/environment/winds'
 import { buildCurrents } from './sources/environment/currents'
+import { buildEarthquakes } from './sources/hazards/earthquakes'
+import { buildVolcanoes } from './sources/hazards/volcanoes'
+import { buildPlates } from './sources/hazards/plates'
+import { buildCities, buildRivers } from './sources/reference/naturalearth'
+import { buildCables } from './sources/maritime/cables'
 
 // Incremental by default: skip a dataset whose snapshot already exists. Pass --force
 // (via `pnpm refresh-data`) to re-fetch. A fresh checkout / CI still produces data once.
@@ -117,6 +122,18 @@ async function buildMaritime(): Promise<void> {
       console.warn(`  lanes skipped, kept existing: ${(e as Error).message}`)
     }
   } else console.log('  shipping: present, skipping (pnpm refresh-data to refresh)')
+
+  // Submarine cables (OSM/Overpass, ODbL). OSM coverage is patchy, so the guard ships only what
+  // OSM actually has and never overwrites a good snapshot with a thin/empty fetch.
+  if (FORCE || !present('cables.json')) {
+    try {
+      const cables = await buildCables()
+      if (cables.features.length >= 20) write('cables.json', cables)
+      else console.warn(`  cables: only ${cables.features.length}, kept existing (OSM coverage thin)`)
+    } catch (e) {
+      console.warn(`  cables skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  cables: present, skipping (pnpm refresh-data to refresh)')
 }
 
 // Environment: winds + currents as streamline fields. Each is independent and self-guarding;
@@ -139,6 +156,67 @@ async function buildEnvironment(): Promise<void> {
       console.warn(`  ${name} skipped, kept existing: ${(e as Error).message}`)
     }
   }
+}
+
+// Hazards: earthquakes (recent + historic), volcanoes, and tectonic plate boundaries. Each is
+// independent and self-guarding; a down source keeps its existing snapshot rather than failing
+// the whole build. Plate boundaries are a `lines` snapshot (uniform lane geometry).
+async function buildHazards(): Promise<void> {
+  if (FORCE || !present('quakes-recent.json', 'quakes-historic.json')) {
+    try {
+      const { recent, historic } = await buildEarthquakes()
+      if (recent.length >= 100) write('quakes-recent.json', recent)
+      else console.warn(`  quakes-recent: only ${recent.length}, kept existing`)
+      if (historic.length >= 100) write('quakes-historic.json', historic)
+      else console.warn(`  quakes-historic: only ${historic.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  earthquakes skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  earthquakes: present, skipping (pnpm refresh-data to refresh)')
+
+  if (FORCE || !present('volcanoes.json')) {
+    try {
+      const volcanoes = await buildVolcanoes()
+      if (volcanoes.length >= 100) write('volcanoes.json', volcanoes)
+      else console.warn(`  volcanoes: only ${volcanoes.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  volcanoes skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  volcanoes: present, skipping (pnpm refresh-data to refresh)')
+
+  if (FORCE || !present('plate-boundaries.json')) {
+    try {
+      const plates = await buildPlates()
+      if (plates.features.length >= 20) write('plate-boundaries.json', plates)
+      else console.warn(`  plates: only ${plates.features.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  plates skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  plates: present, skipping (pnpm refresh-data to refresh)')
+}
+
+// Reference geography: Natural Earth cities (point) and rivers + lake centerlines (lines). Each
+// is independent and self-guarding; a down source keeps its existing snapshot.
+async function buildReference(): Promise<void> {
+  if (FORCE || !present('cities.json')) {
+    try {
+      const cities = await buildCities()
+      if (cities.length >= 100) write('cities.json', cities)
+      else console.warn(`  cities: only ${cities.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  cities skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  cities: present, skipping (pnpm refresh-data to refresh)')
+
+  if (FORCE || !present('rivers.json')) {
+    try {
+      const rivers = await buildRivers()
+      if (rivers.features.length >= 100) write('rivers.json', rivers)
+      else console.warn(`  rivers: only ${rivers.features.length}, kept existing`)
+    } catch (e) {
+      console.warn(`  rivers skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  rivers: present, skipping (pnpm refresh-data to refresh)')
 }
 
 // Per-snapshot weight-budget report. Today's snapshots are small (WDI ~2-5K, airports/
@@ -172,6 +250,8 @@ async function main(): Promise<void> {
   await buildFlights()
   await buildMaritime()
   await buildEnvironment()
+  await buildHazards()
+  await buildReference()
   reportWeights()
   console.log('Done.')
 }

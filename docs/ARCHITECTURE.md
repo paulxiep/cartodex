@@ -195,6 +195,16 @@ container / tanker / dry bulk). Winds and currents are real gridded fields (FNMO
 ERDDAP) integrated into streamlines at build time. Where a port or lane has no traffic datum it renders
 empty / unweighted — never faked.
 
+M4 adds a **hazards** domain (USGS earthquakes — recent significant + great historic; NOAA NCEI
+volcanoes; fraxen/tectonicplates plate boundaries, ODC-BY) and a **society** domain (World Bank
+connectivity/education/research indicators), plus reference geography (Natural Earth cities and rivers)
+and submarine cables. It is a datasets-and-producers-only pass with **zero engine change** — every new
+layer rides the existing `marker` (point), `lane` (lines), and `choropleth` (region) channels. Rivers
+carry an inverted Natural Earth `scalerank` so the `lane` channel draws major rivers wider. Cables come
+from **OpenStreetMap via Overpass (ODbL)**; TeleGeography was rejected as CC BY-NC-SA (non-commercial +
+share-alike). OSM cable coverage is thinner than proprietary sets, so a build guard ships only what OSM
+actually has rather than padding — never faked.
+
 ## 6. How to add a map
 
 - **A new projection**: add a `View` module under `engine/views/`, register it (set `equalArea` if it
