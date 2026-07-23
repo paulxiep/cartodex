@@ -302,18 +302,16 @@ export const DATASETS: Record<string, Dataset> = {
     attribution: 'Currents: Aviso geostrophic surface currents via NOAA CoastWatch ERDDAP — mean field, streamlines',
     defaultRamp: 'PuBuGn',
   },
-  // ── Surface fixture (M5 WP-0): SYNTHETIC bands to prove the surface encoding before real DEM
-  //    data lands (WP-1 replaces this with real ETOPO `elevation`). Not real relief - clearly
-  //    labelled synthetic so it never masquerades as data. ──────────────────────────────────
-  'surface-fixture': {
-    id: 'surface-fixture',
-    label: 'Relief fixture (synthetic)',
+  // ── Elevation & bathymetry (M5): real ETOPO relief as hypsometric contour bands ──────────
+  elevation: {
+    id: 'elevation',
+    label: 'Elevation & bathymetry',
     kind: 'surface',
     domain: 'environment',
-    source: { mode: 'baked', snapshot: 'surface-fixture.json' },
-    provider: 'cartodex',
-    license: 'n/a',
-    attribution: 'Synthetic engineering fixture (not real elevation) — WP-0 proof of the surface encoding',
+    source: { mode: 'baked', snapshot: 'elevation.json' },
+    provider: 'NOAA NGDC (ETOPO1) via NOAA CoastWatch ERDDAP',
+    license: 'Public domain (US Gov)',
+    attribution: 'Relief: ETOPO1 global relief (NOAA NGDC, public domain) via NOAA CoastWatch ERDDAP — hypsometric contour bands',
     defaultScale: 'threshold',
     defaultThresholds: HYPSOMETRIC_LEVELS,
     defaultDiverging: HYPSOMETRIC_RAMP,

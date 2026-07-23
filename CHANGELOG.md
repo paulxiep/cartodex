@@ -30,10 +30,19 @@ society, all riding the existing map channels. (Collects milestones M4 to M6.)
   adult literacy, secondary enrolment, and research spending. Also added across existing
   themes: tourism arrivals, tax revenue, protected areas, under-5 mortality, and immunization.
 
+### Relief
+- A global elevation and bathymetry map: land height and ocean depth on one colour scale,
+  from deep-ocean blues through a green-to-brown-to-snow land ramp, from public-domain NOAA
+  ETOPO data. It reads as a complete relief-and-sea-floor picture in one layer.
+- Relief works as a backdrop under the other layers, so you can read earthquakes over the sea
+  floor, with country outlines drawn on top.
+- It covers the whole Earth with no seam, and works on every view: the flat maps, the
+  spin-and-zoom globe, and the polar map.
+
 ### Data and sources
 - New sources: USGS earthquakes, NOAA volcanoes, tectonic plate boundaries (Bird 2003),
-  Natural Earth cities and rivers, OpenStreetMap submarine cables, and more World Bank
-  indicators. Each active layer shows its source and licence.
+  Natural Earth cities and rivers, OpenStreetMap submarine cables, NOAA ETOPO relief, and more
+  World Bank indicators. Each active layer shows its source and licence.
 
 ## [0.1.1] - 2026-07-03
 

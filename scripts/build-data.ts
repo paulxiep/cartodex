@@ -22,7 +22,7 @@ import { buildPorts } from './sources/maritime/ports'
 import { buildLanes } from './sources/maritime/lanes'
 import { buildWinds } from './sources/environment/winds'
 import { buildCurrents } from './sources/environment/currents'
-import { buildSurfaceFixture } from './sources/environment/_surfaceFixture'
+import { buildElevation } from './sources/environment/elevation'
 import { buildEarthquakes } from './sources/hazards/earthquakes'
 import { buildVolcanoes } from './sources/hazards/volcanoes'
 import { buildPlates } from './sources/hazards/plates'
@@ -140,9 +140,17 @@ async function buildMaritime(): Promise<void> {
 // Environment: winds + currents as streamline fields. Each is independent and self-guarding;
 // a source that is down is skipped (currents may defer without blocking winds) - never faked.
 async function buildEnvironment(): Promise<void> {
-  // M5 WP-0: synthetic surface fixture - deterministic and offline, so always (re)written; it
-  // proves the `surface` encoding before real ETOPO data. WP-1 removes this line.
-  write('surface-fixture.json', buildSurfaceFixture())
+  // Elevation + bathymetry: real ETOPO1 relief contoured to hypsometric bands (M5). Self-guarding
+  // like the fields below; a down ERDDAP keeps the existing snapshot rather than failing the build.
+  if (FORCE || !present('elevation.json')) {
+    try {
+      const relief = await buildElevation()
+      if (relief.features.length >= 8) write('elevation.json', relief)
+      else console.warn(`  elevation: only ${relief.features.length} bands, kept existing`)
+    } catch (e) {
+      console.warn(`  elevation skipped, kept existing: ${(e as Error).message}`)
+    }
+  } else console.log('  elevation: present, skipping (pnpm refresh-data to refresh)')
 
   const fields: Array<{ name: string; build: () => Promise<{ features: unknown[] }> }> = [
     { name: 'winds.json', build: buildWinds },

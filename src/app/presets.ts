@@ -184,16 +184,27 @@ export const PRESETS: Preset[] = [
       { channel: 'choropleth', dataset: 'internet-users' },
     ],
   },
-  // M5 WP-0 scratch preset: binds the synthetic surface fixture to eyeball the encoding across
-  // views (relief background, borders-only base on top). WP-1 replaces it with real elevation.
+  // M5: hypsometric relief from real ETOPO. A background surface under borders (and, on the globe,
+  // under earthquakes) - the headline scalar layer.
   {
-    id: 'surface-fixture',
-    label: 'Relief fixture (synthetic)',
-    description: 'WP-0 proof of the surface encoding: synthetic hypsometric bands with a borders-only base.',
+    id: 'relief-bathymetry',
+    label: 'Relief & bathymetry',
+    description: 'Global hypsometric relief from ETOPO — land elevation and ocean bathymetry on one diverging sea/land scale (NOAA, public domain).',
     view: 'equirectangular',
     bindings: [
-      { channel: 'surface', dataset: 'surface-fixture' },
+      { channel: 'surface', dataset: 'elevation' },
       { channel: 'base', dataset: 'land' },
+    ],
+  },
+  {
+    id: 'relief-quakes-globe',
+    label: 'Relief & earthquakes (globe)',
+    description: 'Recent significant earthquakes over ETOPO relief and bathymetry on a spin-and-zoom globe — the seismic belt against the sea floor.',
+    view: 'orthographic',
+    bindings: [
+      { channel: 'surface', dataset: 'elevation' },
+      { channel: 'base', dataset: 'land' },
+      { channel: 'marker', dataset: 'quakes-recent' },
     ],
   },
 ]

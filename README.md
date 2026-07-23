@@ -53,7 +53,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 
 ## Current state
 
-**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, and world cities ride the same platform.
+**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete; M5 adds a scalar-surface encoding with real global elevation & bathymetry.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, world cities, and hypsometric relief ride the same platform.
 
 **M0 — Scaffold** laid the engine: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that emits id-keyed snapshots. First data: World Bank population and OpenFlights airports + routes.
 
@@ -84,6 +84,12 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Submarine cables** — the other network under the sea, from OpenStreetMap (ODbL) via Overpass. TeleGeography was rejected as CC BY-NC-SA (non-commercial); OSM coverage is thinner but permissive, and a build guard ships only what OSM actually has.
 - **Society domain** — a batch of new World Bank indicators (internet users, mobile subscriptions, literacy, secondary enrolment, R&D spending, tourism, tax revenue, protected areas, child mortality, immunization) as pure config rows, under a new `society` domain.
 
+**M5 — Scalar surfaces** adds the **`surface`** encoding: a scalar field drawn as build-time hypsometric contour bands, the sibling of M3's vector `field`.
+
+- **Elevation & bathymetry** — global relief from **ETOPO1** (NOAA NGDC, public domain, via NOAA CoastWatch ERDDAP). One grid covers land elevation and ocean depth, drawn on a **diverging sea/land colour ramp** centred at sea level (a general `ScaleSpec.diverging` capability — per-side ramps meeting at a pivot). Marching squares (`d3-contour`, build-time) cut the grid at a shared hypsometric level list that is also the colour thresholds, so each band maps to its own swatch.
+- **Composes as a background** — a single-occupancy relief under the other layers (earthquakes over the sea floor), with `base` drawn borders-only on top.
+- **Projection-invariant by construction** — the band geometry is produced full-sphere (no dropped antimeridian strip) and antimeridian-cut in one shared build-time factory, so it renders seamlessly under flat, globe, and polar views alike; a later SST or climate surface is a new dataset on the same encoding, not new code.
+
 Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
 
 Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade relations, and the contiguous cartogram.
@@ -97,6 +103,7 @@ Not wired: detailed energy mix and emissions, agricultural production volumes, m
 | **M2 — Platform architecture** | dataset × channel × scale model; display-mode channels + per-channel composer (bivariate maps); scale engine (log/quantile/threshold colour, sqrt size) fixing magnitude skew; `region-symbol` bubble layer; area-channel colored cartogram; domain-neutral catalog + generated `DATA_SOURCES.md` + weight-budget report | Done |
 | **M3 — Maritime & environmental** | seaports sized by real AIS traffic (WPI ∪ IMF PortWatch); the real shipping-lane network on a `lane` channel; surface winds and ocean currents (FNMOC, Aviso via NOAA ERDDAP) as streamlines on a new `field` channel | Done |
 | **M4 — Overlay breadth** | hazards (USGS earthquakes, NOAA volcanoes, plate boundaries); reference geography (Natural Earth cities + rivers); submarine cables (OSM/ODbL); a `society` domain of new World Bank indicators — all on existing channels, zero engine change | Done |
+| **M5 — Scalar surfaces** | a `surface` encoding (scalar contour bands) with global elevation & bathymetry from ETOPO1 (NOAA, public domain) on a diverging sea/land ramp; band geometry produced full-sphere and antimeridian-cut in a shared build-time factory, so every projection renders it seamlessly | Done |
 
 Later milestones are refined here as work is defined.
 

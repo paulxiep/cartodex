@@ -91,3 +91,64 @@ export async function fetchErddapVectorGrid(cfg: ErddapGridConfig): Promise<Vect
   }
   return { lons, lats, u, v }
 }
+
+// ── Scalar grid (single variable, e.g. ETOPO elevation, SST) ──────────────────────────────
+
+export interface ErddapScalarConfig {
+  base: string
+  datasetId: string
+  variable: string
+  lat: [number, number]
+  lon: [number, number]
+  /** integer index stride on the native grid (e.g. 30 on ETOPO's 1/60° grid → ~0.5° sampling). */
+  stride: number
+}
+
+export interface ScalarGrid {
+  lons: number[] // ascending
+  lats: number[] // ascending
+  /** values[latIdx][lonIdx]; NaN for masked cells (kept masked, never faked to zero). */
+  values: number[][]
+}
+
+/**
+ * Fetch a downsampled scalar grid (one variable, no time axis) from an ERDDAP griddap dataset as
+ * CSV. Same transport as the vector fetch (CSV, index stride), for static relief/topography grids.
+ */
+export async function fetchErddapScalarGrid(cfg: ErddapScalarConfig): Promise<ScalarGrid> {
+  const dim = `%5B(${cfg.lat[0]}):${cfg.stride}:(${cfg.lat[1]})%5D%5B(${cfg.lon[0]}):${cfg.stride}:(${cfg.lon[1]})%5D`
+  const csv = await getText(`${cfg.base}/griddap/${cfg.datasetId}.csv?${cfg.variable}${dim}`)
+  const lines = csv.split('\n')
+  const cols = lines[0]!.split(',')
+  const iLat = cols.indexOf('latitude')
+  const iLon = cols.indexOf('longitude')
+  const iVal = cols.indexOf(cfg.variable)
+  if (iLat < 0 || iLon < 0 || iVal < 0) throw new Error(`unexpected columns: ${cols.join(',')}`)
+
+  const cellVal = new Map<string, number>()
+  const latSet = new Set<number>()
+  const lonSet = new Set<number>()
+  for (let i = 2; i < lines.length; i++) {
+    const line = lines[i]!.trim()
+    if (!line) continue
+    const c = line.split(',')
+    const lat = Number(c[iLat])
+    const lon = Number(c[iLon])
+    const val = Number(c[iVal])
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue
+    latSet.add(lat)
+    lonSet.add(lon)
+    if (Number.isFinite(val)) cellVal.set(`${lat},${lon}`, val)
+  }
+
+  const lats = [...latSet].sort((a, b) => a - b)
+  const lons = [...lonSet].sort((a, b) => a - b)
+  const latIdx = new Map(lats.map((v, i) => [v, i]))
+  const lonIdx = new Map(lons.map((v, i) => [v, i]))
+  const values: number[][] = lats.map(() => new Array<number>(lons.length).fill(NaN))
+  for (const [key, val] of cellVal) {
+    const [latS, lonS] = key.split(',')
+    values[latIdx.get(Number(latS))!]![lonIdx.get(Number(lonS))!] = val
+  }
+  return { lons, lats, values }
+}

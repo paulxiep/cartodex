@@ -29,10 +29,12 @@ ways and two datasets can share a map:
 
 - **Dataset** — display-agnostic values + metadata (`src/app/catalog.ts`). Kinds: `region` (keyed by
   numeric ISO), `point` (lon/lat), `pair` (flow endpoints), `grid` (vector field, baked to streamlines),
-  `lines` (a baked LineString network, e.g. shipping lanes).
+  `lines` (a baked LineString network, e.g. shipping lanes), `surface` (a baked scalar field contoured
+  to value-carrying polygon bands, e.g. elevation).
 - **Channel** — how values map to a visual variable, with a **capacity** (`src/engine/channels.ts`):
   - *single-occupancy* (a second selection replaces the first): `choropleth` (region→colour),
-    `area` (region→size, an in-place cartogram), `bubble` (region-centroid→size).
+    `area` (region→size, an in-place cartogram), `bubble` (region-centroid→size), `surface`
+    (a scalar field as a full-map relief/heatmap fill — one background at a time).
   - *multi-occupancy* (distinguished by style): `marker` (points), `arc` (flows), `field` (gridded
     vector streamlines — winds, currents), `lane` (a baked line network drawn as context).
   - *structural*: `base` (land/borders, no dataset).
@@ -54,10 +56,10 @@ Its one constraint: density-equalization assumes true areas, so `area` requires 
 views. (Earlier drafts modeled the cartogram as a `D ∘ P` *view*; M2 reconciled it as an area channel
 so colour and area can combine.)
 
-## 2. Channels reduce to six primitives by datasets
+## 2. Channels reduce to seven primitives by datasets
 
 Topic content (flights, demographics, resources, relations, winds) is not separate code paths. Every
-channel draws through one of six rendering **primitives**, each parameterized by a **dataset**:
+channel draws through one of seven rendering **primitives**, each parameterized by a **dataset**:
 
 | Primitive | Renders | Channels | Example datasets |
 |-----------|---------|----------|------------------|
@@ -67,6 +69,7 @@ channel draws through one of six rendering **primitives**, each parameterized by
 | `point`         | sized markers at coordinates | `marker` | airports, seaports |
 | `flow`          | weighted arcs between geo-nodes | `arc` | flight routes; political relations |
 | `field`         | per-feature lines, width by magnitude | `field`, `lane` | surface winds, ocean currents; shipping lanes |
+| `surface`       | scalar contour bands, filled by value | `surface` | elevation & bathymetry (relief) |
 
 The key collapse: a flight route and a political relation are the same shape (a weighted edge), so both
 are `arc` over the `flow` primitive with different data; likewise the shipping-lane network rides the
@@ -115,6 +118,23 @@ interface PrimitiveRenderer {
   (`lib/clip.ts`) drops marks on a globe's hidden hemisphere.
 - *Area encoding*: the `region` primitive scales each feature around its **screen-space centroid**
   (`path.centroid`) by `sqrt(value / max)` when an `area` binding is present, on an equal-area base.
+
+### Projection-invariant geometry (spherical base coordinate)
+
+Spherical **lon/lat is the canonical base coordinate**: the invariant truth of where things are on
+Earth. The four views (flat equirectangular/equal-earth, sphere orthographic, radial polar) are just
+different **flattenings** of that sphere, which is exactly d3-geo's model — data on the sphere, a
+projection maps sphere→plane. So the view and layer axes are genuinely orthogonal: the render path
+has **no view-specific branches**; a primitive projects the same GeoJSON identically under every
+projection.
+
+The corollary is a boundary rule: **producing valid, seamless-on-the-sphere geometry is a build-time
+/ data-layer responsibility, kept strictly outside the projection layer.** A valid spherical polygon
+is projection-invariant; a malformed one (wrong ring winding, a degenerate antimeridian seam, an
+unclosed ring) can render differently per flattening — the strict whole-sphere polar view exposes
+defects the antimeridian-cutting flat views and the hemisphere-clipping globe forgive. The engine
+therefore trusts its input geometry and never "fixes" it per projection; the producers emit geometry
+that is already valid on the sphere (see §5, the surface contour bands).
 
 ## 4. Engine, app boundary
 
@@ -205,6 +225,23 @@ from **OpenStreetMap via Overpass (ODbL)**; TeleGeography was rejected as CC BY-
 share-alike). OSM cable coverage is thinner than proprietary sets, so a build guard ships only what OSM
 actually has rather than padding — never faked.
 
+M5 adds the **`surface`** encoding: a scalar field (a magnitude per cell, no direction — the sibling
+of M3's vector `field`) rendered as build-time **hypsometric contour bands** filled by value. The
+first dataset is **elevation & bathymetry** from **ETOPO1** (NOAA NGDC, public domain, via NOAA
+CoastWatch ERDDAP): one grid covers land relief and ocean depth, so a single **diverging sea/land
+colour ramp** centred at sea level reads as a complete relief-and-bathymetry map (a general scale
+capability — `ScaleSpec.diverging`, per-side ramps meeting at a pivot). Because the backend is
+SVG-only, the surface is the SVG-native form of a heatmap: the producer runs marching squares
+(`d3-contour`, build-time) at a shared hypsometric level list — the same levels are the colour
+thresholds, so each band's `value` maps to its own swatch. It composes as a single-occupancy
+**background** (relief under earthquakes; a future SST surface under currents), with the `base` layer
+rendered borders-only over it. The geometry work — contouring, the grid→lon/lat transform, and
+emitting valid full-sphere bands **cut at the antimeridian** so they render seamlessly under every
+projection — lives in one shared build-layer factory, `scripts/sources/environment/adapters/
+contourBands.ts` (per §3's projection-invariant-geometry rule); the `elevation` builder is a thin
+fetch over it, and future scalar surfaces (SST, climate) are the same two lines against a different
+variable.
+
 ## 6. How to add a map
 
 - **A new projection**: add a `View` module under `engine/views/`, register it (set `equalArea` if it
@@ -214,7 +251,8 @@ actually has rather than padding — never faked.
   is instantly available as choropleth, area, and bubble.
 - **A genuinely new display mode**: add a `Channel` row (`engine/channels.ts`) and, if it needs a new
   draw routine, a primitive under `engine/primitives/`. This is rare; M3 added the `field` primitive
-  and drew both winds/currents (`field` channel) and the shipping-lane network (`lane` channel) through it.
+  and drew both winds/currents (`field` channel) and the shipping-lane network (`lane` channel) through
+  it, and M5 added the `surface` primitive (scalar contour bands) for elevation and future scalar fields.
 
 ## 7. Toolchain & delivery
 
