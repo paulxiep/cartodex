@@ -184,6 +184,18 @@ export const PRESETS: Preset[] = [
       { channel: 'choropleth', dataset: 'internet-users' },
     ],
   },
+  // M5 WP-0 scratch preset: binds the synthetic surface fixture to eyeball the encoding across
+  // views (relief background, borders-only base on top). WP-1 replaces it with real elevation.
+  {
+    id: 'surface-fixture',
+    label: 'Relief fixture (synthetic)',
+    description: 'WP-0 proof of the surface encoding: synthetic hypsometric bands with a borders-only base.',
+    view: 'equirectangular',
+    bindings: [
+      { channel: 'surface', dataset: 'surface-fixture' },
+      { channel: 'base', dataset: 'land' },
+    ],
+  },
 ]
 
 export function presetHash(p: Preset): string {

@@ -8,6 +8,7 @@ import { regionSymbolRenderer } from './region-symbol'
 import { pointRenderer } from './point'
 import { flowRenderer } from './flow'
 import { fieldRenderer } from './field'
+import { surfaceRenderer } from './surface'
 
 export const PRIMITIVES: Record<Primitive, PrimitiveRenderer> = {
   base: baseRenderer,
@@ -16,6 +17,7 @@ export const PRIMITIVES: Record<Primitive, PrimitiveRenderer> = {
   point: pointRenderer,
   flow: flowRenderer,
   field: fieldRenderer,
+  surface: surfaceRenderer,
 }
 
 export function getPrimitive(primitive: Primitive): PrimitiveRenderer {

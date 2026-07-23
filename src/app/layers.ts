@@ -13,7 +13,7 @@ import { DATASETS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
 import { topmostSelected } from './taxonomy'
 import type { Taxonomy } from './taxonomy'
-import { loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged } from './data-loaders'
+import { loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged, loadSurfaceData } from './data-loaders'
 
 export interface Binding {
   channel: ChannelId
@@ -33,17 +33,41 @@ export function bindingKey(b: Binding): string {
 
 function scaleSpecFor(ds: Dataset, channel: ChannelId, override?: ScaleType): ScaleSpec {
   const type = override ?? ds.defaultScale ?? getChannel(channel).defaultScaleType
-  return { type, ramp: ds.defaultRamp }
+  // A dataset may pin explicit threshold breaks (hypsometric levels) and a diverging ramp
+  // (sea/land relief); both flow into the scale so bands align to levels and colour to sea level.
+  return { type, ramp: ds.defaultRamp, thresholds: ds.defaultThresholds, diverging: ds.defaultDiverging }
 }
 
-async function resolveBase(): Promise<ResolvedLayer> {
+// `bordersOnly` drops the land fill so a background surface (relief/bathymetry) shows through
+// with country outlines drawn on top of it; the darker stroke reads over bright hypsometric
+// colour. Normal maps keep the opaque land fill over the sphere.
+async function resolveBase(bordersOnly = false): Promise<ResolvedLayer> {
   const features = await loadCountries()
   return {
     id: 'base',
     primitive: 'base',
     // Land clearly lighter than water (sphere #0d1826), borders legible as a bright hairline.
     features,
-    style: { fill: '#2b3644', stroke: 'rgba(165,185,210,0.5)', strokeWidth: 0.5 },
+    style: bordersOnly
+      ? { fill: 'none', stroke: 'rgba(15,22,32,0.6)', strokeWidth: 0.5 }
+      : { fill: '#2b3644', stroke: 'rgba(165,185,210,0.5)', strokeWidth: 0.5 },
+  }
+}
+
+// Surface: a baked scalar field (elevation/bathymetry relief, heatmap) drawn as value-filled
+// contour bands. Single-occupancy background - drawn backmost so overlays (quakes, currents)
+// read above it. Colour comes from the dataset's scale (threshold + diverging sea/land ramp).
+async function resolveSurface(b: Binding): Promise<ResolvedLayer> {
+  const ds = DATASETS[b.dataset]!
+  const d = await loadSurfaceData(ds)
+  return {
+    id: `surface-${ds.id}`,
+    primitive: 'surface',
+    features: d.features,
+    values: d.values,
+    valueDomain: d.domain,
+    scale: scaleSpecFor(ds, 'surface', b.scale),
+    style: { opacity: 1 },
   }
 }
 
@@ -208,10 +232,16 @@ export async function buildLayers(
 ): Promise<{ layers: ResolvedLayer[]; failed: Set<string> }> {
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
+  const surface = bindings.find((b) => b.channel === 'surface')
 
-  // Draw order (back to front): base, lanes (background), region, field, arcs, bubbles, markers.
+  // Draw order (back to front): surface (relief background), base, lanes, region, field, arcs,
+  // bubbles, markers. A surface fills the whole map, so it sits behind everything - and base
+  // becomes borders-only over it, so country outlines read on top of the relief.
   const tasks: Task[] = []
-  if (bindings.some((b) => b.channel === 'base')) tasks.push({ keys: ['base'], run: resolveBase })
+  if (surface) tasks.push({ keys: [bindingKey(surface)], run: () => resolveSurface(surface) })
+  if (bindings.some((b) => b.channel === 'base')) {
+    tasks.push({ keys: ['base'], run: () => resolveBase(surface != null) })
+  }
   // Lane bindings that share a snapshot (shipping by ship type) merge into one layer; different
   // snapshots (shipping vs cables vs rivers) stay separate networks, each drawn from its own file.
   const laneGroups = new Map<string, Binding[]>()

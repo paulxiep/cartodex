@@ -11,7 +11,7 @@
 // erased at runtime, so this stays Node-safe.
 
 // Pure vocabulary only (no DOM/d3), so the Node producer can import this module.
-import type { DatasetKind, ScaleType } from '../engine/model'
+import type { DatasetKind, DivergingRamp, ScaleType } from '../engine/model'
 import type { Taxonomy } from './taxonomy'
 
 /** Thematic grouping for the composer. Open taxonomy: maritime/environment land in M3,
@@ -69,6 +69,11 @@ export interface Dataset {
   defaultScale?: ScaleType
   /** default colour ramp (d3-scale-chromatic key) for a colour channel. */
   defaultRamp?: string
+  /** `surface`/`threshold`: explicit band breaks (also the producer's contour levels) so the
+   *  colour buckets align to the baked bands rather than quantile-derived ones. */
+  defaultThresholds?: number[]
+  /** `surface`: a diverging colour ramp whose two sides meet at a pivot (sea level for relief). */
+  defaultDiverging?: DivergingRamp
   /** for `pair` datasets: the `point` dataset whose ids the endpoints reference. */
   endpointsFrom?: string
   /** the disjoint LEAF fields this layer's value sums over (point: vessel-type counts, default
@@ -234,6 +239,22 @@ function portDataset(p: PortLayer): Dataset {
   }
 }
 
+// ── Hypsometric relief constants (shared by the producer and the catalog) ─────────────────
+// One list of elevation levels in metres, used BOTH as the producer's d3-contour cut levels
+// AND as the colour-scale thresholds, so each baked band's value equals a break and gets its
+// own swatch. Spans deep ocean to high summits, symmetric enough around sea level (0) that the
+// diverging ramp's seam lands at the coastline.
+export const HYPSOMETRIC_LEVELS = [-8000, -4000, -2000, -1000, -200, 0, 200, 500, 1000, 2000, 4000]
+
+// The diverging sea/land ramp, meeting at sea level. Below: deep navy → pale shelf blue;
+// above: lowland green → tan → upland brown → snow white. Custom stop-lists (not a stock d3
+// scheme) tuned for app coherence; each side runs pivot-outward across its bands.
+export const HYPSOMETRIC_RAMP: DivergingRamp = {
+  pivot: 0,
+  below: ['#0a2540', '#0e4a6e', '#1f77b4', '#5ba3d0', '#9ecae1'],
+  above: ['#2e7d32', '#8bc34a', '#e6d27a', '#b5834f', '#8a6240', '#f5f5f5'],
+}
+
 export const DATASETS: Record<string, Dataset> = {
   ...Object.fromEntries(WDI_INDICATORS.map((ind) => [ind.id, wdiDataset(ind)])),
   airports: {
@@ -280,6 +301,22 @@ export const DATASETS: Record<string, Dataset> = {
     license: 'Aviso+ altimetry (attribution)',
     attribution: 'Currents: Aviso geostrophic surface currents via NOAA CoastWatch ERDDAP — mean field, streamlines',
     defaultRamp: 'PuBuGn',
+  },
+  // ── Surface fixture (M5 WP-0): SYNTHETIC bands to prove the surface encoding before real DEM
+  //    data lands (WP-1 replaces this with real ETOPO `elevation`). Not real relief - clearly
+  //    labelled synthetic so it never masquerades as data. ──────────────────────────────────
+  'surface-fixture': {
+    id: 'surface-fixture',
+    label: 'Relief fixture (synthetic)',
+    kind: 'surface',
+    domain: 'environment',
+    source: { mode: 'baked', snapshot: 'surface-fixture.json' },
+    provider: 'cartodex',
+    license: 'n/a',
+    attribution: 'Synthetic engineering fixture (not real elevation) — WP-0 proof of the surface encoding',
+    defaultScale: 'threshold',
+    defaultThresholds: HYPSOMETRIC_LEVELS,
+    defaultDiverging: HYPSOMETRIC_RAMP,
   },
   // ── Hazards (M4): earthquakes, volcanoes, plate boundaries ──────────────────────────────
   'quakes-recent': {

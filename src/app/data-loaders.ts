@@ -194,3 +194,27 @@ export async function loadLinesMerged(datasets: Dataset[]): Promise<LinesData> {
   const values = sumFields(fc, fields)
   return { features: fc, values, domain: extentOf(values.values()) }
 }
+
+export interface SurfaceData {
+  features: FeatureCollection
+  values: Map<string | number, number>
+  domain: [number, number]
+}
+
+/**
+ * Load a baked scalar surface (elevation/bathymetry, SST): a FeatureCollection of contour-band
+ * polygons, each carrying a single numeric `value` (its band level) which drives colour, not
+ * width. Mirrors `loadLinesData`, but reads one value field (default `value`) rather than
+ * summing traffic classes. Feature ids are assigned by index so the colour scale can key off them.
+ */
+export async function loadSurfaceData(ds: Dataset): Promise<SurfaceData> {
+  const fc = await fetchJson<FeatureCollection>(urlOf(ds))
+  const field = ds.valueFields?.[0] ?? 'value'
+  const values = new Map<string | number, number>()
+  fc.features.forEach((f, i) => {
+    f.id = i
+    const v = f.properties?.[field]
+    if (typeof v === 'number' && Number.isFinite(v)) values.set(i, v)
+  })
+  return { features: fc, values, domain: extentOf(values.values()) }
+}

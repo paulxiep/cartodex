@@ -21,6 +21,8 @@ export type {
   DatasetKind,
   ScaleType,
   ScaleSpec,
+  RampRef,
+  DivergingRamp,
 } from './model'
 
 export type ViewKind = 'projection'

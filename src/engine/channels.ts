@@ -84,6 +84,17 @@ export const CHANNELS: Record<ChannelId, Channel> = {
     datasetKind: 'lines',
     defaultScaleType: 'sqrt',
   },
+  surface: {
+    id: 'surface',
+    // A background scalar fill (relief / bathymetry / heatmap): one full-map surface at a time,
+    // so single-occupancy; bands are inherently bucketed, so the default scale is threshold.
+    label: 'Surface (relief / heatmap)',
+    primitive: 'surface',
+    capacity: 'single',
+    encodes: 'color',
+    datasetKind: 'surface',
+    defaultScaleType: 'threshold',
+  },
 }
 
 export const CHANNEL_LIST: Channel[] = Object.values(CHANNELS)

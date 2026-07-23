@@ -22,6 +22,7 @@ import { buildPorts } from './sources/maritime/ports'
 import { buildLanes } from './sources/maritime/lanes'
 import { buildWinds } from './sources/environment/winds'
 import { buildCurrents } from './sources/environment/currents'
+import { buildSurfaceFixture } from './sources/environment/_surfaceFixture'
 import { buildEarthquakes } from './sources/hazards/earthquakes'
 import { buildVolcanoes } from './sources/hazards/volcanoes'
 import { buildPlates } from './sources/hazards/plates'
@@ -139,6 +140,10 @@ async function buildMaritime(): Promise<void> {
 // Environment: winds + currents as streamline fields. Each is independent and self-guarding;
 // a source that is down is skipped (currents may defer without blocking winds) - never faked.
 async function buildEnvironment(): Promise<void> {
+  // M5 WP-0: synthetic surface fixture - deterministic and offline, so always (re)written; it
+  // proves the `surface` encoding before real ETOPO data. WP-1 removes this line.
+  write('surface-fixture.json', buildSurfaceFixture())
+
   const fields: Array<{ name: string; build: () => Promise<{ features: unknown[] }> }> = [
     { name: 'winds.json', build: buildWinds },
     { name: 'currents.json', build: buildCurrents },
