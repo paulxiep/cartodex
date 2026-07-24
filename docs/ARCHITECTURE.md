@@ -40,6 +40,10 @@ ways and two datasets can share a map:
   - *structural*: `base` (land/borders, no dataset).
 - **Scale** — `{ type: linear | log | quantile | threshold | sqrt, ramp }`, defaulted per dataset
   (log/quantile for skewed magnitudes) and overridable per binding (`src/engine/lib/scales.ts`).
+  `linear` clamps to a robust percentile domain by default (M6, so outliers do not flatten the
+  ramp), and a `diverging` ramp (per-side, meeting at a pivot) serves both threshold relief bands
+  and continuous signed indicators. `resolveColorScale` returns the fill function plus the resolved
+  domain/breaks a legend reads (see §5).
 
 Consequences that fall out: **bivariate maps** (e.g. choropleth GDP + bubble population), a **skew
 fix** (magnitudes read as sqrt bubbles or log/quantile colour instead of near-monochrome), and a
@@ -255,6 +259,32 @@ control** in the composer selects the active month, deep-linked in the URL hash.
 `data-loaders.ts` before `buildLayers` hands `ResolvedLayer`s to the engine, so the render path stays
 view × channel × dataset, and only the shown month is fetched (lazy per binding). Raster surfaces stay
 deferred (they need the canvas/WebGL backend the SVG-only engine intentionally omits).
+
+### M6: range-aware colour, diverging, legend
+
+M6 makes the colour layer range-aware and decodable, an engine pass with no producer change. Three
+parts, all in the scale layer (`src/engine/lib/scales.ts`) and the app chrome:
+
+- **Robust domains.** A `linear` scale previously pinned its domain to the raw `extent`, so one
+  outlier flattened the ramp for the rest. It now clamps to a robust percentile window (2–98% by
+  default) with `.clamp(true)`, so out-of-window values pin to the endpoints. `linear` defaults to
+  robust; `log` keeps the raw extent (it already compresses skew, and clamping would hide the tail
+  the log ramp exists to show). The per-dataset `log`/`quantile` hand-flags stay where a magnitude
+  axis still reads best (money, population, land area); the robust default removes the need for them
+  on the ordinary linear indicators.
+- **Diverging on `linear`.** M5's `DivergingRamp` (per-side ramps meeting at a pivot), built for
+  threshold relief bands, now also drives a continuous `linear` scale: two half-ramps over a
+  *symmetric* robust bound, so a signed indicator (growth, net migration, FDI net inflows) reads
+  opposite hues around a neutral pivot. One vocabulary serves both surface bands and region
+  choropleths; there is no separate boolean/centre field.
+- **Legend.** `resolveColorScale(values, spec)` returns a `ResolvedScale`: the `color` function the
+  primitives fill with, plus the metadata a legend needs (kind, shown domain, true extent, pivot,
+  discrete breaks, and which ends are clamped). The app builds a legend for each colour channel
+  (surface, choropleth) from the *same* resolver and samples the returned `color` for its swatches,
+  so legend colours are identical to the map by construction, not re-derived. This is why the
+  resolver returns a struct rather than a bare function: one code path feeds both the fill and the
+  legend. Categorical support (an ordinal branch) is deferred until a classified dataset exists to
+  consume it.
 
 ## 6. How to add a map
 

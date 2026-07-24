@@ -10,7 +10,7 @@ import { quantile } from 'd3-array'
 import type { Feature } from 'geojson'
 import type { GeoPath } from 'd3-geo'
 import type { PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
-import { makeColorScale, valueOf } from '../lib/scales'
+import { resolveColorScale, valueOf } from '../lib/scales'
 import { showTooltip, hideTooltip } from '../lib/tooltip'
 
 const NO_DATA = '#222831'
@@ -31,7 +31,7 @@ function label(feature: Feature, value: number | undefined): string {
 // neutral no-data fill; otherwise the layer's colour scale maps its value.
 function fillFn(layer: ResolvedLayer): (f: Feature) => string {
   if (!layer.values || !layer.scale) return () => NO_DATA
-  const color = makeColorScale(layer.values.values(), layer.scale)
+  const { color } = resolveColorScale(layer.values.values(), layer.scale)
   return (f) => {
     const v = valueOf(layer, f)
     return v == null ? NO_DATA : (color(v) ?? NO_DATA)

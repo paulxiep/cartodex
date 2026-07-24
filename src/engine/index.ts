@@ -11,8 +11,8 @@ export { compatible } from './compatible'
 // Geometry + geo helpers (generic, not topic datasets) for the app's data layer.
 export { loadCountries, loadBorders, loadLand } from './lib/geodata'
 export { flowFeature, greatCirclePoints } from './lib/greatCircle'
-export { makeColorScale, radiusScale, valueOf, interpolatorByName } from './lib/scales'
-export type { ColorFn } from './lib/scales'
+export { resolveColorScale, radiusScale, valueOf, interpolatorByName } from './lib/scales'
+export type { ColorFn, ResolvedScale } from './lib/scales'
 
 export type {
   Primitive,

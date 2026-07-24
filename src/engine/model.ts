@@ -50,14 +50,18 @@ export type RampRef = string | string[]
 
 /**
  * A diverging colour descriptor: below and above a `pivot` value each get their own ramp. Modular
- * per side (sea vs land for hypsometric relief); each side is a stock scheme or a custom stop-list.
- * Applied by the `threshold` scale (bands), which knows which buckets fall on each side of the pivot,
- * so the seam is insensitive to asymmetric extents. The seam lands exactly on the pivot only when the
- * pivot is one of the threshold breakpoints (as it is for elevation: 0 ∈ HYPSOMETRIC_LEVELS);
- * otherwise it falls on the nearest breakpoint.
+ * per side (sea vs land for hypsometric relief; sign for signed indicators); each side is a stock
+ * scheme or a custom stop-list. Applied by two scale types:
+ *   - `threshold` (discrete bands): buckets split at the pivot, so the seam is insensitive to
+ *     asymmetric extents. The seam lands exactly on the pivot only when the pivot is one of the
+ *     threshold breakpoints (as it is for elevation: 0 ∈ HYPSOMETRIC_LEVELS); else on the nearest.
+ *   - `linear` (continuous): two half-ramps meeting at the pivot over a symmetric bound, so a signed
+ *     indicator (net migration, growth) reads opposite hues around zero with a neutral midpoint.
+ * Each side runs pivot-outward: `below` from extreme→pivot (stop 0 = extreme), `above` from
+ * pivot→extreme (stop 0 = pivot), so their inner ends should meet near a light neutral.
  */
 export interface DivergingRamp {
-  /** value the two ramps meet at (sea level for elevation). Default 0. */
+  /** value the two ramps meet at (sea level for elevation, zero for signed indicators). Default 0. */
   pivot?: number
   below: RampRef
   above: RampRef
@@ -69,8 +73,13 @@ export interface ScaleSpec {
   ramp?: RampRef
   /** explicit breakpoints for `threshold`; if unset, quantile-derived. */
   thresholds?: number[]
-  /** diverging colour (threshold only): per-side ramps meeting at a pivot. Overrides `ramp`. */
+  /** diverging colour (`threshold` bands or `linear` continuous): per-side ramps meeting at a pivot.
+   *  Overrides `ramp`. */
   diverging?: DivergingRamp
+  /** clamp the colour domain to a robust percentile window (default `[0.02, 0.98]`) and enable
+   *  `.clamp(true)`, so outliers pin to the endpoints instead of flattening the ramp for everyone
+   *  else. `linear` defaults to robust; `log` is opt-in. Set `false` to force the raw min/max extent. */
+  robust?: boolean | [number, number]
 }
 
 /**

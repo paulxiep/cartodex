@@ -12,7 +12,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 
 - **View axis** (how area geometry is laid out, mutually exclusive): `equirectangular`, `equal-earth` (equal-area base), `azimuthal-equidistant` (polar), `orthographic` (spin/zoom globe).
 - **Channel axis** (how a dataset is drawn, composable by capacity): `choropleth` (region→colour), `area` (region→size, an in-place cartogram — needs the equal-area base), `bubble` (region-centroid→size), `marker` (points), `arc` (flows), plus structural `base`. Single-occupancy channels (choropleth/area/bubble) hold one dataset; multi-occupancy (marker/arc) hold many. A **colored cartogram** is `area` + `choropleth` composed; a **bivariate** map is choropleth + bubble. Routes and country relations are the same `arc` channel: topic content is *data*, not new code.
-- **Scale**: per-binding `linear | log | quantile | threshold | sqrt`, defaulted per dataset (log/quantile for skewed magnitudes so GDP/population read as differentiated colour, not near-monochrome).
+- **Scale**: per-binding `linear | log | quantile | threshold | sqrt`, defaulted per dataset (log/quantile for skewed magnitudes so GDP/population read as differentiated colour, not near-monochrome). `linear` is range-aware by default (a robust percentile domain, so a few outliers do not flatten the ramp); signed measures use a **diverging** scale around a pivot; and each colour channel renders a **legend** from the resolved scale.
 - **Engine, app boundary**: a reusable `engine/` (views, channels, primitives, render; takes a container, holds no datasets or page chrome) and a thin `app/` (gallery, composer, catalog, loaders, presets) that consumes it. The engine is publishable as a standalone package.
 
 | Part | Responsibility |
@@ -46,14 +46,14 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 ## Tech stack
 
 - **Engine / projections:** `d3-geo` for azimuthal-equidistant, orthographic, and equal-area (Equal Earth) bases; `d3-zoom` + `d3-drag` for pan/zoom and globe rotation
-- **Channels / scales:** `d3-scale` (sequential / log / quantile / threshold colour, sqrt size) + `d3-scale-chromatic`; the `area` channel is a per-feature affine transform over the equal-area base (non-contiguous cartogram), composable with `choropleth`
+- **Channels / scales:** `d3-scale` (sequential / log / quantile / threshold / diverging colour over a robust-by-default domain, sqrt size) + `d3-scale-chromatic`, with a legend rendered from the resolved scale; the `area` channel is a per-feature affine transform over the equal-area base (non-contiguous cartogram), composable with `choropleth`
 - **Data:** `topojson-client`; world-atlas geometry from a CDN; a licensing-aware per-dataset loader (`baked` / `client` / Worker-proxy)
 - **Language / build / quality:** TypeScript (strict), Vite, **pnpm** (global hard-linked store), ESLint (typescript-eslint)
 - **Delivery:** static `dist/` served from a CDN; data snapshots are refreshed off-build by a scheduled producer and read same-origin, so an app deploy never waits on a source
 
 ## Current state
 
-**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete; M5 adds a scalar-surface encoding with real global elevation & bathymetry.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, world cities, and hypsometric relief ride the same platform.
+**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete; M5 adds a scalar-surface encoding with real global elevation & bathymetry; M6 makes the colour scales range-aware and adds a legend.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, world cities, and hypsometric relief ride the same platform.
 
 **M0 — Scaffold** laid the engine: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that emits id-keyed snapshots. First data: World Bank population and OpenFlights airports + routes.
 
@@ -92,6 +92,12 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Sea-surface temperature** — the second `surface` dataset, proving the encoding generalises: **NOAA OISST** (public domain) as a monthly climatology, ocean-only (masked land renders transparent), on a sequential cold→warm ramp with fixed thresholds so months are comparable. A "SST & currents" preset draws the surface currents over it. The encoding cost this: a per-dataset ramp is now a scheme name **or** a custom stop-list for any scale, and the band factory masks no-data — both shared, so climate surfaces follow for free.
 - **A monthly temporal axis** — winds, currents, and SST are month-resolved (12 monthly climatology snapshots each); a global month control on the map steps through the seasonal cycle, deep-linked in the URL. The month resolves app-side into a concrete snapshot before layers reach the engine, so the engine stays two-axis and lazy-loads only the shown month.
 
+**M6 — Scale & legend robustness** makes the colour layer range-aware and decodable, an engine pass on today's data with no new producers:
+
+- **Range-aware domains** — a `linear` colour scale clamps to a robust percentile window by default, so a couple of outliers no longer flatten the ramp for the rest; choropleths differentiate without per-dataset hand-flagging. The money and extreme-skew indicators keep their `log`/`quantile` defaults where a magnitude axis still reads best.
+- **Diverging signed indicators** — population growth, GDP growth, net migration, and the new **FDI net inflows** (% of GDP, World Bank) render on a diverging scale around zero, so sign reads at a glance with a neutral midpoint. It reuses the same per-side ramp model M5 built for sea/land relief, extended from threshold bands to a continuous `linear` scale.
+- **A legend** — each active colour channel draws a compact legend (ramp, value range, units from the dataset label, clamp and centre markers) built from the same resolved scale the renderer fills with, so it cannot drift from the map. Categorical support is deferred until a classified dataset lands.
+
 Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
 
 Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade relations, and the contiguous cartogram.
@@ -106,6 +112,7 @@ Not wired: detailed energy mix and emissions, agricultural production volumes, m
 | **M3 — Maritime & environmental** | seaports sized by real AIS traffic (WPI ∪ IMF PortWatch); the real shipping-lane network on a `lane` channel; surface winds and ocean currents (FNMOC, Aviso via NOAA ERDDAP) as streamlines on a new `field` channel | Done |
 | **M4 — Overlay breadth** | hazards (USGS earthquakes, NOAA volcanoes, plate boundaries); reference geography (Natural Earth cities + rivers); submarine cables (OSM/ODbL); a `society` domain of new World Bank indicators — all on existing channels, zero engine change | Done |
 | **M5 — Scalar surfaces** | a `surface` encoding (scalar contour bands): global elevation & bathymetry from ETOPO1 on a diverging sea/land ramp, and sea-surface temperature from NOAA OISST (both public domain) as a sequential ocean-heat surface; band geometry produced full-sphere and antimeridian-cut in a shared build-time factory; plus a monthly temporal axis (a global month control) walking winds, currents, and SST through the seasonal cycle | Done |
+| **M6 — Scale & legend robustness** | range-aware colour (a robust percentile domain by default, so outliers stop flattening the ramp); a diverging scale for signed indicators (growth, net migration, and the new FDI net inflows) reusing the M5 per-side ramp model; and a legend rendered from the resolved scale for each colour channel. Categorical support deferred until a classified dataset lands | Done |
 
 Later milestones are refined here as work is defined.
 

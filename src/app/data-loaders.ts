@@ -4,7 +4,7 @@
 //
 // Loaders return the value Map plus its extent (for sqrt sizing / bubbles). They do NOT
 // precompute a colour domain: colour scales (log/quantile) are built from the full value
-// array at render time by the engine's makeColorScale, so the loader just passes values
+// array at render time by the engine's resolveColorScale, so the loader just passes values
 // through. Lazy by construction: a loader runs only when a binding is resolved.
 
 import { extent } from 'd3-array'

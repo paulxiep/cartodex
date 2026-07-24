@@ -4,7 +4,7 @@
 > by hand; edit the catalog and regenerate. Every baked snapshot is an open-licensed source,
 > normalised and re-hosted; the in-app attribution string carries the same credit.
 
-65 datasets across 9 domains.
+66 datasets across 9 domains.
 
 ### Demographics
 
@@ -28,6 +28,7 @@
 | GDP per capita (US$) | `region` | World Bank WDI | CC-BY 4.0 |
 | GDP per capita, PPP (int$) | `region` | World Bank WDI | CC-BY 4.0 |
 | GDP growth (%/yr) | `region` | World Bank WDI | CC-BY 4.0 |
+| FDI net inflows (% of GDP) | `region` | World Bank WDI | CC-BY 4.0 |
 | GNI per capita (US$) | `region` | World Bank WDI | CC-BY 4.0 |
 | Inflation (%/yr) | `region` | World Bank WDI | CC-BY 4.0 |
 | Unemployment (%) | `region` | World Bank WDI | CC-BY 4.0 |

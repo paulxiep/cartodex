@@ -21,6 +21,14 @@ export interface Binding {
   scale?: ScaleType
 }
 
+/** A colour-channel legend source: the dataset label plus the resolved layer's values + scale,
+ *  handed to the legend which resolves them through the same engine scale the renderer uses. */
+export interface LegendEntry {
+  label: string
+  values: Iterable<number>
+  scale: ScaleSpec
+}
+
 // Flight-route density knob: keep only routes flown by at least this many airlines.
 export const FLIGHT_MIN_COUNT = 2
 
@@ -230,7 +238,7 @@ interface Task {
 export async function buildLayers(
   bindings: Binding[],
   month?: number,
-): Promise<{ layers: ResolvedLayer[]; failed: Set<string> }> {
+): Promise<{ layers: ResolvedLayer[]; failed: Set<string>; legends: LegendEntry[] }> {
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
   const surface = bindings.find((b) => b.channel === 'surface')
@@ -284,7 +292,23 @@ export async function buildLayers(
       }
     }
   })
-  return { layers, failed }
+
+  // Legend sources: the colour-encoding layers that actually resolved (surface, region choropleth).
+  // Both channels are single-occupancy, so each matches at most one built layer by its primitive;
+  // the label comes from the bound dataset, the values/scale from the layer the renderer draws.
+  const legends: LegendEntry[] = []
+  const colorLayer = (primitive: ResolvedLayer['primitive']): ResolvedLayer | undefined =>
+    layers.find((l) => l.primitive === primitive && l.scale != null && l.values != null)
+  const surfaceLayer = surface && colorLayer('surface')
+  if (surface && surfaceLayer) {
+    legends.push({ label: DATASETS[surface.dataset]!.label, values: surfaceLayer.values!.values(), scale: surfaceLayer.scale! })
+  }
+  const regionLayer = choro && colorLayer('region')
+  if (choro && regionLayer) {
+    legends.push({ label: DATASETS[choro.dataset]!.label, values: regionLayer.values!.values(), scale: regionLayer.scale! })
+  }
+
+  return { layers, failed, legends }
 }
 
 /** Attribution strings for the datasets actually drawn (base included). For a taxonomy channel
