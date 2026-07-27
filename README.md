@@ -2,6 +2,8 @@
 
 A composable engine and gallery for maps: projections and cartograms, with data layers that combine freely.
 
+[View deployment](https://cartodex.app/)
+
 Cartodex is a codex of maps: pick a **view** (an equirectangular plane, an **equal-area** base, a polar **azimuthal-equidistant** map, or a spin/zoom **orthographic globe**) and bind datasets into display **channels** on top of it. View and channels are **orthogonal axes**, so the gallery is a grid of combinations rather than a pile of one-off maps. Under the hood it is a small, typed **engine** with open registries: a new map is a new *dataset* or a new *binding*, not a new bespoke page.
 
 ## Architecture
