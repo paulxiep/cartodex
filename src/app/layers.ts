@@ -11,6 +11,7 @@ import { loadCountries, getChannel } from '../engine'
 import type { ChannelId, ResolvedLayer, ScaleSpec, ScaleType } from '../engine'
 import { DATASETS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
+import { markerStyleFor, PLATE_STYLE, SEA_BLUE, CABLE_AMBER, WINDS_COLOR, CURRENTS_COLOR } from './layer-styles'
 import { topmostSelected } from './taxonomy'
 import type { Taxonomy } from './taxonomy'
 import { loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged, loadSurfaceData } from './data-loaders'
@@ -19,6 +20,14 @@ export interface Binding {
   channel: ChannelId
   dataset: string
   scale?: ScaleType
+}
+
+/** A colour-channel legend source: the dataset label plus the resolved layer's values + scale,
+ *  handed to the legend which resolves them through the same engine scale the renderer uses. */
+export interface LegendEntry {
+  label: string
+  values: Iterable<number>
+  scale: ScaleSpec
 }
 
 // Flight-route density knob: keep only routes flown by at least this many airlines.
@@ -116,26 +125,22 @@ async function resolveBubble(b: Binding): Promise<ResolvedLayer> {
   }
 }
 
-// Colour by domain: air (airports/flights) stays yellow, sea (seaports/lanes) is one blue tone
-// so the two systems never blur together and any sea sub-layers merge cleanly.
-const AIR_YELLOW = '#ffcc44'
-const SEA_BLUE = 'rgba(96,168,235,0.85)'
-
 // Marker datasets that share one snapshot (seaports by type) merge into ONE layer sized by the
 // summed union of selected fields - markers placed once, never stacked duplicates. Grouped by
-// snapshot upstream, so airports and seaports stay distinct (and keep their air/sea colour).
+// snapshot upstream, so airports and seaports stay distinct (and keep their per-dataset glyph).
+// Shape + colour + outline come from the central marker palette (layer-styles.ts).
 async function resolveMarkers(bindings: Binding[]): Promise<ResolvedLayer | null> {
   const datasets = topmostDatasets(bindings, PORT_TAXONOMY)
   if (!datasets.length) return null
   const d = await loadPointsMerged(datasets)
-  const sea = datasets[0]!.domain === 'maritime'
+  const ms = markerStyleFor(datasets[0]!)
   return {
     id: `marker-${snapshotKey(datasets[0]!)}`,
     primitive: 'point',
     features: d.features,
     values: d.values,
     valueDomain: d.domain,
-    style: { fill: sea ? SEA_BLUE : AIR_YELLOW, radiusRange: [1.5, 7] },
+    style: { fill: ms.fill, shape: ms.shape, stroke: ms.stroke, strokeWidth: ms.strokeWidth, radiusRange: [1.5, 7] },
   }
 }
 
@@ -169,11 +174,6 @@ function topmostDatasets(bindings: Binding[], tax: Taxonomy): Dataset[] {
   return bindings.filter((b) => top.has(b.dataset)).map((b) => DATASETS[b.dataset]).filter((d): d is Dataset => !!d)
 }
 
-// Submarine cables take a contrasting signal-amber so they read against the sea-blue shipping/river
-// water networks when overlaid (the "two undersea networks" preset); mirrors how the field resolver
-// tones winds vs currents.
-const CABLE_AMBER = 'rgba(240,175,90,0.85)'
-
 // One lane layer per SNAPSHOT: datasets that share a snapshot (shipping by ship type) merge into one
 // geometry (summed over the union of the top-most selected leaf fields, drawn once); different
 // snapshots (shipping vs cables vs rivers) are distinct networks resolved separately. Grouped by
@@ -182,13 +182,31 @@ async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> 
   const datasets = topmostDatasets(bindings, LANE_TAXONOMY)
   if (!datasets.length) return null
   const d = await loadLinesMerged(datasets)
+  const first = datasets[0]!
+  // Plate boundaries are a hazard context network, not a sea lane: a bright core over a dark casing
+  // (layer-styles.ts) so they read over dark sea, bright bathymetry, and warm SST alike.
+  if (first.id === 'plate-boundaries') {
+    return {
+      id: `lane-${snapshotKey(first)}`,
+      primitive: 'field',
+      features: d.features,
+      values: d.values,
+      valueDomain: d.domain,
+      style: {
+        stroke: PLATE_STYLE.core,
+        casing: PLATE_STYLE.casing,
+        widthRange: [PLATE_STYLE.width, PLATE_STYLE.width],
+        opacity: PLATE_STYLE.opacity,
+      },
+    }
+  }
   const weighted = d.values.size > 0
-  const cable = datasets[0]!.id === 'cables'
+  const cable = first.id === 'cables'
   const stroke = cable
     ? weighted ? CABLE_AMBER : 'rgba(240,175,90,0.6)'
     : weighted ? SEA_BLUE : 'rgba(120,150,190,0.32)'
   return {
-    id: `lane-${snapshotKey(datasets[0]!)}`,
+    id: `lane-${snapshotKey(first)}`,
     primitive: 'field',
     features: d.features,
     values: d.values,
@@ -206,7 +224,7 @@ async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> 
 async function resolveField(b: Binding, month?: number): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
   const d = await loadLinesData(ds, month)
-  const color = ds.id === 'currents' ? 'rgba(90,200,190,0.75)' : 'rgba(240,150,90,0.8)'
+  const color = ds.id === 'currents' ? CURRENTS_COLOR : WINDS_COLOR
   return {
     id: `field-${ds.id}`,
     primitive: 'field',
@@ -230,7 +248,7 @@ interface Task {
 export async function buildLayers(
   bindings: Binding[],
   month?: number,
-): Promise<{ layers: ResolvedLayer[]; failed: Set<string> }> {
+): Promise<{ layers: ResolvedLayer[]; failed: Set<string>; legends: LegendEntry[] }> {
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
   const surface = bindings.find((b) => b.channel === 'surface')
@@ -241,7 +259,10 @@ export async function buildLayers(
   const tasks: Task[] = []
   if (surface) tasks.push({ keys: [bindingKey(surface)], run: () => resolveSurface(surface, month) })
   if (bindings.some((b) => b.channel === 'base')) {
-    tasks.push({ keys: ['base'], run: () => resolveBase(surface != null) })
+    // A land-covering relief (elevation) shows through, so the base drops its land fill; an
+    // ocean-only surface (SST) leaves land alone. Non-surface maps keep the opaque land fill.
+    const bordersOnly = surface != null && !!DATASETS[surface.dataset]?.coversLand
+    tasks.push({ keys: ['base'], run: () => resolveBase(bordersOnly) })
   }
   // Lane bindings that share a snapshot (shipping by ship type) merge into one layer; different
   // snapshots (shipping vs cables vs rivers) stay separate networks, each drawn from its own file.
@@ -284,7 +305,23 @@ export async function buildLayers(
       }
     }
   })
-  return { layers, failed }
+
+  // Legend sources: the colour-encoding layers that actually resolved (surface, region choropleth).
+  // Both channels are single-occupancy, so each matches at most one built layer by its primitive;
+  // the label comes from the bound dataset, the values/scale from the layer the renderer draws.
+  const legends: LegendEntry[] = []
+  const colorLayer = (primitive: ResolvedLayer['primitive']): ResolvedLayer | undefined =>
+    layers.find((l) => l.primitive === primitive && l.scale != null && l.values != null)
+  const surfaceLayer = surface && colorLayer('surface')
+  if (surface && surfaceLayer) {
+    legends.push({ label: DATASETS[surface.dataset]!.label, values: surfaceLayer.values!.values(), scale: surfaceLayer.scale! })
+  }
+  const regionLayer = choro && colorLayer('region')
+  if (choro && regionLayer) {
+    legends.push({ label: DATASETS[choro.dataset]!.label, values: regionLayer.values!.values(), scale: regionLayer.scale! })
+  }
+
+  return { layers, failed, legends }
 }
 
 /** Attribution strings for the datasets actually drawn (base included). For a taxonomy channel

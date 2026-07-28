@@ -7,8 +7,10 @@ import { feature, mesh } from 'topojson-client'
 import type { Topology, GeometryCollection } from 'topojson-specification'
 import type { Feature, FeatureCollection, MultiLineString } from 'geojson'
 
-/** world-atlas 110m (Natural Earth derived), keyed by ISO 3166-1 numeric id. */
-const WORLD_110M = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+/** world-atlas 50m (Natural Earth derived), keyed by ISO 3166-1 numeric id. The 50m tier keeps
+ *  coastlines/borders sharp when zoomed and aligns with the 50m-derived rivers; geometry is
+ *  re-projected per frame by the views, so resolution is independent of the zoom mechanism. */
+const WORLD_50M = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json'
 
 const cache = new Map<string, Promise<Topology>>()
 
@@ -25,7 +27,7 @@ function loadTopology(url: string): Promise<Topology> {
 }
 
 /** Countries as a FeatureCollection; each feature `id` is the ISO numeric code. */
-export async function loadCountries(url = WORLD_110M): Promise<FeatureCollection> {
+export async function loadCountries(url = WORLD_50M): Promise<FeatureCollection> {
   const topo = await loadTopology(url)
   const countries = topo.objects['countries'] as GeometryCollection
   const fc = feature(topo, countries) as unknown as FeatureCollection
@@ -33,7 +35,7 @@ export async function loadCountries(url = WORLD_110M): Promise<FeatureCollection
 }
 
 /** Country borders as a single MultiLineString feature (shared-edge mesh). */
-export async function loadBorders(url = WORLD_110M): Promise<Feature<MultiLineString>> {
+export async function loadBorders(url = WORLD_50M): Promise<Feature<MultiLineString>> {
   const topo = await loadTopology(url)
   const countries = topo.objects['countries'] as GeometryCollection
   const geometry = mesh(topo, countries, (a, b) => a !== b)
@@ -41,7 +43,7 @@ export async function loadBorders(url = WORLD_110M): Promise<Feature<MultiLineSt
 }
 
 /** Land outline as a single feature, useful as a globe/base fill. */
-export async function loadLand(url = WORLD_110M): Promise<FeatureCollection> {
+export async function loadLand(url = WORLD_50M): Promise<FeatureCollection> {
   const topo = await loadTopology(url)
   const land = topo.objects['land'] as GeometryCollection
   return feature(topo, land) as unknown as FeatureCollection

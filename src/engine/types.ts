@@ -8,7 +8,7 @@
 import type { GeoPath, GeoProjection } from 'd3-geo'
 import type { Selection } from 'd3-selection'
 import type { FeatureCollection } from 'geojson'
-import type { Primitive, ScaleSpec } from './model'
+import type { MarkerShape, Primitive, ScaleSpec } from './model'
 
 // The dependency-free core vocabulary lives in model.ts (so pure consumers - the app catalog
 // and the Node producer - share it without pulling the DOM-bound engine in). Re-exported here
@@ -20,6 +20,7 @@ export type {
   Channel,
   DatasetKind,
   ScaleType,
+  MarkerShape,
   ScaleSpec,
   RampRef,
   DivergingRamp,
@@ -67,10 +68,15 @@ export interface LayerStyle {
   opacity?: number
   /** point/bubble: marker radius range [min, max] in px, mapped from value via sqrt. */
   radiusRange?: [number, number]
+  /** point: marker glyph (circle/triangle/square/diamond). Defaults to circle. */
+  shape?: MarkerShape
   /** field: streamline stroke-width range [min, max] in px, mapped from magnitude via sqrt. */
   widthRange?: [number, number]
   /** field: draw a downstream arrowhead at each line's end (flow direction; streamlines only). */
   arrowhead?: boolean
+  /** field: draw a wider casing stroke of `color` beneath the core (width = core + `width`), so a
+   *  line reads over any background (e.g. plate boundaries over relief/SST). */
+  casing?: { color: string; width: number }
   /** flow: arc color. */
   arcColor?: string
   /** flow/point: drop features whose value is below this threshold (density knob). */

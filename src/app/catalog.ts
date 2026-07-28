@@ -74,6 +74,9 @@ export interface Dataset {
   defaultThresholds?: number[]
   /** `surface`: a diverging colour ramp whose two sides meet at a pivot (sea level for relief). */
   defaultDiverging?: DivergingRamp
+  /** `surface`: the field has land values (relief), so the base drops its land fill and the surface
+   *  shows through. Omit for ocean-only surfaces (SST) so land keeps its normal fill. */
+  coversLand?: boolean
   /** month-resolved snapshot: the baked file is per-month (`<id>-MM.json`) and the active month
    *  (from the composer's global month control) selects which one loads. Winds, currents, SST. */
   temporal?: 'monthly'
@@ -97,24 +100,37 @@ export interface WdiIndicator {
   domain: DomainId
   ramp: string
   scale?: ScaleType
+  /** signed indicator: a diverging ramp around a pivot (zero) so sign reads at a glance; overrides
+   *  `ramp` for the fill. The default `linear` scale renders it as continuous half-ramps. */
+  diverging?: DivergingRamp
+}
+
+// Shared diverging ramp for signed indicators (net migration, growth, FDI): blue below zero, red
+// above, meeting at a pale neutral at the pivot. A colourblind-safe RdBu split; each side runs
+// pivot-outward per DivergingRamp's convention (below: deep blue → pale; above: pale → deep red).
+export const SIGNED_DIVERGING: DivergingRamp = {
+  pivot: 0,
+  below: ['#2166ac', '#4393c3', '#92c5de', '#d1e5f0'],
+  above: ['#fddbc7', '#f4a582', '#d6604d', '#b2182b'],
 }
 
 export const WDI_INDICATORS: WdiIndicator[] = [
   // ── Demographics ──────────────────────────────────────────────────────────────
   { id: 'population', label: 'Population', code: 'SP.POP.TOTL', domain: 'demographics', ramp: 'YlGnBu', scale: 'quantile' },
   { id: 'pop-density', label: 'Population density (per km²)', code: 'EN.POP.DNST', domain: 'demographics', ramp: 'YlGnBu', scale: 'quantile' },
-  { id: 'pop-growth', label: 'Population growth (%/yr)', code: 'SP.POP.GROW', domain: 'demographics', ramp: 'PuBuGn' },
+  { id: 'pop-growth', label: 'Population growth (%/yr)', code: 'SP.POP.GROW', domain: 'demographics', ramp: 'RdBu', diverging: SIGNED_DIVERGING },
   { id: 'life-expectancy', label: 'Life expectancy (years)', code: 'SP.DYN.LE00.IN', domain: 'demographics', ramp: 'RdYlGn' },
   { id: 'fertility', label: 'Fertility rate (births/woman)', code: 'SP.DYN.TFRT.IN', domain: 'demographics', ramp: 'BuPu' },
   { id: 'urban-pct', label: 'Urban population (%)', code: 'SP.URB.TOTL.IN.ZS', domain: 'demographics', ramp: 'PuBu' },
   { id: 'infant-mortality', label: 'Infant mortality (per 1k births)', code: 'SP.DYN.IMRT.IN', domain: 'demographics', ramp: 'OrRd' },
-  { id: 'net-migration', label: 'Net migration', code: 'SM.POP.NETM', domain: 'demographics', ramp: 'PiYG' },
+  { id: 'net-migration', label: 'Net migration', code: 'SM.POP.NETM', domain: 'demographics', ramp: 'RdBu', diverging: SIGNED_DIVERGING },
 
   // ── Economy ───────────────────────────────────────────────────────────────────
   { id: 'gdp', label: 'GDP (current US$)', code: 'NY.GDP.MKTP.CD', domain: 'economy', ramp: 'YlGn', scale: 'log' },
   { id: 'gdp-per-capita', label: 'GDP per capita (US$)', code: 'NY.GDP.PCAP.CD', domain: 'economy', ramp: 'Greens', scale: 'log' },
   { id: 'gdp-per-capita-ppp', label: 'GDP per capita, PPP (int$)', code: 'NY.GDP.PCAP.PP.CD', domain: 'economy', ramp: 'Greens', scale: 'log' },
-  { id: 'gdp-growth', label: 'GDP growth (%/yr)', code: 'NY.GDP.MKTP.KD.ZG', domain: 'economy', ramp: 'PuBuGn' },
+  { id: 'gdp-growth', label: 'GDP growth (%/yr)', code: 'NY.GDP.MKTP.KD.ZG', domain: 'economy', ramp: 'RdBu', diverging: SIGNED_DIVERGING },
+  { id: 'fdi-net-inflows', label: 'FDI net inflows (% of GDP)', code: 'BX.KLT.DINV.WD.GD.ZS', domain: 'economy', ramp: 'RdBu', diverging: SIGNED_DIVERGING },
   { id: 'gni-per-capita', label: 'GNI per capita (US$)', code: 'NY.GNP.PCAP.CD', domain: 'economy', ramp: 'Greens', scale: 'log' },
   { id: 'inflation', label: 'Inflation (%/yr)', code: 'FP.CPI.TOTL.ZG', domain: 'economy', ramp: 'OrRd' },
   { id: 'unemployment', label: 'Unemployment (%)', code: 'SL.UEM.TOTL.ZS', domain: 'economy', ramp: 'OrRd' },
@@ -162,6 +178,7 @@ function wdiDataset(ind: WdiIndicator): Dataset {
     attribution: `${ind.label}: World Bank (${ind.code}, CC-BY 4.0) · ISO-3166 crosswalk`,
     defaultScale: ind.scale ?? 'linear',
     defaultRamp: ind.ramp,
+    ...(ind.diverging ? { defaultDiverging: ind.diverging } : {}),
   }
 }
 
@@ -346,6 +363,7 @@ export const DATASETS: Record<string, Dataset> = {
     defaultScale: 'threshold',
     defaultThresholds: HYPSOMETRIC_LEVELS,
     defaultDiverging: HYPSOMETRIC_RAMP,
+    coversLand: true,
   },
   // ── Hazards (M4): earthquakes, volcanoes, plate boundaries ──────────────────────────────
   'quakes-recent': {

@@ -5,11 +5,9 @@
 
 import { select } from 'd3-selection'
 import { drag } from 'd3-drag'
-import { zoom, zoomIdentity } from 'd3-zoom'
-import type { ZoomTransform } from 'd3-zoom'
 import { geoGraticule10 } from 'd3-geo'
 import type { Selection } from 'd3-selection'
-import type { GeoGeometryObjects, GeoProjection } from 'd3-geo'
+import type { GeoGeometryObjects, GeoPath, GeoProjection } from 'd3-geo'
 import type {
   MapHandle,
   MapOptions,
@@ -20,6 +18,15 @@ import type {
 } from './types'
 
 type SvgSelection = Selection<SVGSVGElement, unknown, null, undefined>
+
+// Per-wheel-event zoom factor. Exponential in deltaY so zoom is proportional to scroll intensity and
+// symmetric (in/out are inverses); a mouse notch (deltaY ~100) gives ~1.25x (was a flat 1.1), while a
+// trackpad's many small deltas stay smooth. deltaY is clamped so one oversized or line-mode event
+// can't jump wildly. Raise ZOOM_WHEEL_RATE for faster zoom.
+const ZOOM_WHEEL_RATE = 0.0022
+function wheelZoomFactor(deltaY: number): number {
+  return Math.exp(-Math.max(-120, Math.min(120, deltaY)) * ZOOM_WHEEL_RATE)
+}
 
 /**
  * Globe-like interaction for a d3 projection: drag rotates the projection center
@@ -44,12 +51,30 @@ function attachRotate(svg: SvgSelection, projection: GeoProjection, onChange: ()
     'wheel',
     (event) => {
       event.preventDefault()
-      const factor = event.deltaY < 0 ? 1.1 : 0.9
-      projection.scale(Math.max(40, projection.scale() * factor))
+      projection.scale(Math.max(40, projection.scale() * wheelZoomFactor(event.deltaY)))
       schedule()
     },
     { passive: false },
   )
+}
+
+/**
+ * Keep a flat (non-rotatable) projection's world covering the viewport: nudge `translate` so the
+ * projected sphere bbox has no gap against the [0,0,width,height] frame (no empty margin), or centre
+ * a dimension the world is smaller than (equal-earth's rounded shape at world-fit). Called after any
+ * pan/zoom and on restore, so a flat map can never be dragged or zoomed off into empty space.
+ */
+function clampFlatPan(projection: GeoProjection, path: GeoPath, width: number, height: number): void {
+  const b = path.bounds(sphere)
+  const [[x0, y0], [x1, y1]] = b
+  const [tx, ty] = projection.translate()
+  const wW = x1 - x0
+  const wH = y1 - y0
+  // If the world is at least as wide/tall as the frame, close any gap at an edge; otherwise centre
+  // that axis (equal-earth's rounded shape at world-fit).
+  const ax = wW >= width ? (x0 > 0 ? -x0 : x1 < width ? width - x1 : 0) : (width - (x0 + x1)) / 2
+  const ay = wH >= height ? (y0 > 0 ? -y0 : y1 < height ? height - y1 : 0) : (height - (y0 + y1)) / 2
+  if (ax !== 0 || ay !== 0) projection.translate([tx + ax, ty + ay])
 }
 import { getView } from './views'
 import { getPrimitive } from './primitives'
@@ -70,10 +95,12 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
   // Interaction state persists across re-renders (a layer toggle or resize rebuilds the
   // SVG, but must not reset the user's orientation). Cleared only on an explicit setView.
   // Zoom is stored as a RATIO to the view's fitSize baseline (not an absolute px scale),
-  // so a resize still refits the globe while keeping the user's zoom level.
+  // so a resize still refits the view while keeping the user's zoom level. Rotatable views keep
+  // a rotation + scale ratio; flat views keep a scale ratio + a pan offset (px from fit-centre).
   let savedRotate: [number, number, number] | null = null
   let savedScaleK: number | null = null
-  let savedZoom: ZoomTransform | null = null
+  let savedFlatK = 1
+  let savedPan: [number, number] = [0, 0]
 
   function teardown(): void {
     container.replaceChildren()
@@ -90,6 +117,17 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
     if (view.rotatable && projector.projection) {
       if (savedRotate) projector.projection.rotate(savedRotate)
       if (savedScaleK != null && baseRotatableScale) projector.projection.scale(baseRotatableScale * savedScaleK)
+    }
+
+    // Flat views: the fitSize baseline (scale + centre translate) to restore a saved zoom/pan
+    // against, so a resize refits while keeping the user's zoom and position.
+    const flatProjection = !view.rotatable && projector.projection ? projector.projection : null
+    const baseFlatScale = flatProjection ? flatProjection.scale() : null
+    const baseFlatTranslate = flatProjection ? flatProjection.translate() : null
+    if (flatProjection && baseFlatScale != null && baseFlatTranslate != null) {
+      flatProjection.scale(baseFlatScale * savedFlatK)
+      flatProjection.translate([baseFlatTranslate[0] + savedPan[0], baseFlatTranslate[1] + savedPan[1]])
+      if (projector.path) clampFlatPan(flatProjection, projector.path, width, height)
     }
     const ctx: RenderContext = { view, projector, width, height }
 
@@ -160,16 +198,48 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
         savedScaleK = baseRotatableScale ? proj.scale() / baseRotatableScale : null
         paint()
       })
-    } else {
-      // Flat views: pan + zoom by transforming the root group.
-      const zoomBehavior = zoom<SVGSVGElement, unknown>()
-        .scaleExtent([0.6, 12])
-        .on('zoom', (event) => {
-          savedZoom = event.transform
-          root.attr('transform', event.transform.toString())
-        })
-      svg.call(zoomBehavior)
-      svg.call(zoomBehavior.transform, savedZoom ?? zoomIdentity)
+    } else if (flatProjection && projector.path && baseFlatScale != null && baseFlatTranslate != null) {
+      // Flat views: pan + zoom by re-projecting (mutate scale/translate + repaint), the same model
+      // the globe uses - so geometry stays crisp and strokes keep their width at every zoom, rather
+      // than magnifying a pre-rendered group. Zoom is clamped to [1x, 12x] of the world-fit so the
+      // map can never shrink below the frame, and pan is clamped so it can't leave empty margins.
+      const proj = flatProjection
+      const flatPath = projector.path
+      const baseScale = baseFlatScale
+      const baseTranslate = baseFlatTranslate
+      let raf = 0
+      const schedule = (): void => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paint() }) }
+      const persist = (): void => {
+        savedFlatK = proj.scale() / baseScale
+        const [tx, ty] = proj.translate()
+        savedPan = [tx - baseTranslate[0], ty - baseTranslate[1]]
+      }
+      const dragBehavior = drag<SVGSVGElement, unknown>().on('drag', (event) => {
+        const [tx, ty] = proj.translate()
+        proj.translate([tx + event.dx, ty + event.dy])
+        clampFlatPan(proj, flatPath, width, height)
+        persist()
+        schedule()
+      })
+      svg.call(dragBehavior).style('cursor', 'grab')
+      svg.node()?.addEventListener(
+        'wheel',
+        (event) => {
+          event.preventDefault()
+          const k0 = proj.scale() / baseScale
+          const k = Math.max(1, Math.min(12, k0 * wheelZoomFactor(event.deltaY)))
+          const ratio = k / k0
+          const cx = width / 2
+          const cy = height / 2
+          const [tx, ty] = proj.translate()
+          proj.scale(baseScale * k)
+          proj.translate([cx + (tx - cx) * ratio, cy + (ty - cy) * ratio])
+          clampFlatPan(proj, flatPath, width, height)
+          persist()
+          schedule()
+        },
+        { passive: false },
+      )
     }
   }
 
@@ -191,10 +261,11 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
   return {
     setView(next: ViewId) {
       viewId = next
-      // A deliberate view switch starts from that view's default orientation.
+      // A deliberate view switch starts from that view's default orientation and zoom.
       savedRotate = null
       savedScaleK = null
-      savedZoom = null
+      savedFlatK = 1
+      savedPan = [0, 0]
       render()
     },
     setLayers(next: ResolvedLayer[]) {

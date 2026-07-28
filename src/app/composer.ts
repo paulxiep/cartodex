@@ -9,6 +9,7 @@ import { createMap, getView, compatible, VIEW_LIST, CHANNEL_LIST } from '../engi
 import type { Channel, ChannelId, MapHandle, ViewId } from '../engine'
 import { buildLayers, bindingKey, attributionsFor } from './layers'
 import type { Binding } from './layers'
+import { renderLegend } from './legend'
 import { DATASETS, datasetsOfKind, DOMAIN_ORDER, DOMAIN_LABELS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
 import { applySelection, normalizeSelection } from './taxonomy'
@@ -127,6 +128,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
         <button type="button" data-role="month-next" aria-label="Next month">►</button>
       </div>
       <div id="loading" class="loading" hidden>Loading…</div>
+      <div id="legend" class="legend" hidden></div>
       <footer id="attribution" class="attribution"></footer>
     </main>`
 
@@ -134,6 +136,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   const viewsEl = root.querySelector<HTMLDivElement>('#views')!
   const channelsEl = root.querySelector<HTMLDivElement>('#channels')!
   const loadingEl = root.querySelector<HTMLDivElement>('#loading')!
+  const legendEl = root.querySelector<HTMLDivElement>('#legend')!
   const attrEl = root.querySelector<HTMLElement>('#attribution')!
   const monthEl = root.querySelector<HTMLDivElement>('#month-control')!
   const monthSel = monthEl.querySelector<HTMLSelectElement>('select[data-role="month"]')!
@@ -223,7 +226,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     const token = ++applyToken
     const active = renderable()
     loadingEl.hidden = false
-    const { layers, failed } = await buildLayers(active, state.month)
+    const { layers, failed, legends } = await buildLayers(active, state.month)
     if (token !== applyToken) return // a newer apply superseded this one
     loadingEl.hidden = true
     unavailable.clear()
@@ -233,6 +236,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
       if (rebuildView) handle.setView(state.view)
       handle.setLayers(layers)
     }
+    renderLegend(legendEl, legends)
     history.replaceState(null, '', toHash(state))
     refreshControls()
   }

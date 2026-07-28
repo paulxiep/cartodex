@@ -10,14 +10,14 @@
 
 import type { Feature } from 'geojson'
 import type { PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
-import { makeColorScale, valueOf } from '../lib/scales'
+import { resolveColorScale, valueOf } from '../lib/scales'
 import { showTooltip, hideTooltip } from '../lib/tooltip'
 
 const NO_DATA = 'transparent'
 
 function fillFn(layer: ResolvedLayer): (f: Feature) => string {
   if (!layer.values || !layer.scale) return () => NO_DATA
-  const color = makeColorScale(layer.values.values(), layer.scale)
+  const { color } = resolveColorScale(layer.values.values(), layer.scale)
   return (f) => {
     const v = valueOf(layer, f)
     return v == null ? NO_DATA : (color(v) ?? NO_DATA)

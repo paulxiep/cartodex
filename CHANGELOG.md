@@ -3,11 +3,12 @@
 Changes to the maps you see and interact with, newest first. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [0.1.3] - Unreleased
+## [0.1.3] - 2026-07-28
 
 A breadth pass on the same platform: new overlays across hazards, reference geography, and
 society, plus scalar surfaces (elevation, sea-surface temperature) and a month control that
-walks winds, currents, and SST through the seasons. (Collects milestones M4 to M6.)
+walks winds, currents, and SST through the seasons. It also adds a legend, tells more countries
+apart by colour, and shows the sign of measures that can go negative.
 
 ### Hazards
 - Earthquakes from USGS, sized by magnitude, in two layers: the strongest events of the last
@@ -53,11 +54,24 @@ walks winds, currents, and SST through the seasons. (Collects milestones M4 to M
   month built from real data, not one day's weather.
 - Winds and currents, previously a single averaged field, now carry the full seasonal cycle.
 
+### Legend
+- A legend now appears on the map for each coloured layer, showing the range of values and the
+  colours they map to, so you can read a colour back to a number. It marks the zero point on
+  measures that can go negative, and says when the largest or smallest values run past the ends
+  of the shown range.
+
+### Colour
+- Maps that used to wash out now show more variation: a few extreme values no longer drown out the
+  rest, so more countries are told apart by colour.
+- Measures that can be positive or negative (population growth, GDP growth, net migration, and the
+  new foreign direct investment net inflows) now use two colours meeting at zero, so gains and
+  losses read as different colours at a glance.
+
 ### Data and sources
 - New sources: USGS earthquakes, NOAA volcanoes, tectonic plate boundaries (Bird 2003),
   Natural Earth cities and rivers, OpenStreetMap submarine cables, NOAA ETOPO relief, NOAA OISST
-  sea-surface temperature, and more World Bank indicators. Each active layer shows its source and
-  licence.
+  sea-surface temperature, and more World Bank indicators, including foreign direct investment
+  net inflows. Each active layer shows its source and licence.
 
 ## [0.1.1] - 2026-07-03
 

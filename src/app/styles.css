@@ -208,6 +208,39 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(-
 }
 .month-control select option { color: var(--ink); background: var(--panel); }
 
+/* ── Legend (bottom-right; one block per active colour channel) ───── */
+.legend {
+  position: absolute;
+  right: 12px;
+  bottom: 24px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 220px;
+  padding: 8px 10px;
+  background: rgba(17, 21, 28, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.legend[hidden] { display: none; }
+.legend-entry { display: flex; flex-direction: column; gap: 4px; }
+.legend-title { font-size: 11px; color: var(--ink); }
+.legend-strip {
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+}
+.legend-bands { display: flex; overflow: hidden; }
+.legend-cell { flex: 1 1 0; }
+.legend-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+}
+.legend-pivot { color: var(--ink); }
+
 @media (max-width: 720px) {
   .composer { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .panel { border-right: none; border-bottom: 1px solid var(--line); }
