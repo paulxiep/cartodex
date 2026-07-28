@@ -3,7 +3,7 @@
 // are dropped via the shared far-side test (see lib/clip).
 
 import type { Feature, Point } from 'geojson'
-import type { PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
+import type { MarkerShape, PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
 import { radiusScale, valueOf } from '../lib/scales'
 import { farSideTest } from '../lib/clip'
 import { showTooltip, hideTooltip } from '../lib/tooltip'
@@ -19,6 +19,28 @@ function pointCoord(f: Feature): [number, number] | null {
   if (f.geometry?.type !== 'Point') return null
   const c = (f.geometry as Point).coordinates
   return [c[0] ?? 0, c[1] ?? 0]
+}
+
+// A marker glyph as an SVG path centred at (x,y) with radius r, so every shape shares one <path>
+// join (uniform fill/stroke/tooltip handling). Circle is drawn as two half-arcs; the polygons use
+// r as the circumradius (triangle point-up, square, diamond) tuned so the shapes read at similar
+// visual weight to a circle of the same r.
+function symbolPath(shape: MarkerShape | undefined, x: number, y: number, r: number): string {
+  switch (shape) {
+    case 'triangle': {
+      const h = r * 1.1 // lift so the point-up triangle balances a circle of radius r
+      return `M${x},${y - h} L${x + h * 0.9},${y + h * 0.6} L${x - h * 0.9},${y + h * 0.6} Z`
+    }
+    case 'square': {
+      const s = r * 0.9
+      return `M${x - s},${y - s} H${x + s} V${y + s} H${x - s} Z`
+    }
+    case 'diamond':
+      return `M${x},${y - r} L${x + r},${y} L${x},${y + r} L${x - r},${y} Z`
+    case 'circle':
+    default:
+      return `M${x - r},${y} a${r},${r} 0 1,0 ${r * 2},0 a${r},${r} 0 1,0 ${-r * 2},0 Z`
+  }
 }
 
 function label(f: Feature): string {
@@ -40,13 +62,12 @@ export const pointRenderer: PrimitiveRenderer = {
       const v = valueOf(layer, f)
       placed.push({ x: xy[0], y: xy[1], r: v == null ? 2 : r(v), feature: f })
     }
+    const shape = layer.style.shape
     group
-      .selectAll<SVGCircleElement, PlacedPoint>('circle')
+      .selectAll<SVGPathElement, PlacedPoint>('path')
       .data(placed)
-      .join('circle')
-      .attr('cx', (d) => d.x)
-      .attr('cy', (d) => d.y)
-      .attr('r', (d) => d.r)
+      .join('path')
+      .attr('d', (d) => symbolPath(shape, d.x, d.y, d.r))
       .attr('fill', layer.style.fill ?? '#ffcc44')
       .attr('stroke', layer.style.stroke ?? 'rgba(0,0,0,0.5)')
       .attr('stroke-width', layer.style.strokeWidth ?? 0.4)

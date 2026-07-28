@@ -10,8 +10,14 @@ import { getJson, simplify } from '../_shared'
 const CITIES_URL =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_populated_places_simple.geojson'
 
+// 10m rivers + lake centerlines WITH scale rank and tributaries: the full network (a real Amazon
+// basin, not the sparse basic set), digitized to meet the 50m coastline the base map uses.
 const RIVERS_URL =
-  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_rivers_lake_centerlines.geojson'
+  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_rivers_lake_centerlines_scale_rank.geojson'
+
+// Finer decimation than the ocean-scale lines (shipping/plates): rivers are viewed zoomed-in on the
+// flat map, so a coarse step reads as blocky. Balances detail against the per-snapshot weight budget.
+const RIVER_STEP_DEG = 0.05
 
 // Keep the largest N by population - a legible, budget-safe world-cities layer.
 const TOP_N = 1500
@@ -49,11 +55,11 @@ export async function buildCities(): Promise<RawPoint[]> {
 }
 
 // `buildRivers`: the world's rivers and lake centerlines as a `lines` network on the `lane`
-// channel. The 50m rivers + lake-centerlines set is one file covering both. Natural Earth's
-// `scalerank` orders rivers by prominence (lower = more major); we invert it to a positive `rank`
-// weight so the lane channel draws major rivers (Amazon, Nile, Mississippi) wider than minor
-// tributaries. Build-time simplified to the per-snapshot weight budget (same simplifier as the
-// shipping lanes and plate boundaries). Real geometry only; a river with no rank renders at width 1.
+// channel. The 10m rivers + lake-centerlines (scale rank) set is one file covering both, with the
+// full tributary network (a real Amazon basin). Natural Earth's `scalerank` orders rivers by
+// prominence (lower = more major); we invert it to a positive `rank` weight so the lane channel
+// draws major rivers (Amazon, Nile, Mississippi) wider than minor tributaries. Build-time simplified
+// at a finer step than the ocean-scale lines. Real geometry only; a river with no rank renders at width 1.
 interface RiverProps { scalerank?: number }
 
 export async function buildRivers(): Promise<FeatureCollection> {
@@ -77,13 +83,13 @@ export async function buildRivers(): Promise<FeatureCollection> {
     const sr = f.properties?.scalerank
     const rank = typeof sr === 'number' && Number.isFinite(sr) ? maxRank - sr + 1 : 1
     for (const part of parts) {
-      const coords = simplify(part)
+      const coords = simplify(part, RIVER_STEP_DEG)
       if (coords.length >= 2) {
         features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { rank } })
       }
     }
   }
   const verts = features.reduce((s, f) => s + f.geometry.coordinates.length, 0)
-  console.log(`  rivers: ${features.length} segments, ${verts} vertices (Natural Earth 50m rivers + lake centerlines, public domain)`)
+  console.log(`  rivers: ${features.length} segments, ${verts} vertices (Natural Earth 10m rivers + lake centerlines, scale rank, public domain)`)
   return { type: 'FeatureCollection', features }
 }

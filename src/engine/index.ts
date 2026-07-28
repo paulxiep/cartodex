@@ -21,6 +21,7 @@ export type {
   Channel,
   DatasetKind,
   ScaleType,
+  MarkerShape,
   ScaleSpec,
   RampRef,
   DivergingRamp,

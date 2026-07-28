@@ -47,7 +47,7 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 
 ## Tech stack
 
-- **Engine / projections:** `d3-geo` for azimuthal-equidistant, orthographic, and equal-area (Equal Earth) bases; `d3-zoom` + `d3-drag` for pan/zoom and globe rotation
+- **Engine / projections:** `d3-geo` for azimuthal-equidistant, orthographic, and equal-area (Equal Earth) bases; `d3-drag` and wheel handlers drive pan/zoom and globe rotation by mutating the projection and re-projecting
 - **Channels / scales:** `d3-scale` (sequential / log / quantile / threshold / diverging colour over a robust-by-default domain, sqrt size) + `d3-scale-chromatic`, with a legend rendered from the resolved scale; the `area` channel is a per-feature affine transform over the equal-area base (non-contiguous cartogram), composable with `choropleth`
 - **Data:** `topojson-client`; world-atlas geometry from a CDN; a licensing-aware per-dataset loader (`baked` / `client` / Worker-proxy)
 - **Language / build / quality:** TypeScript (strict), Vite, **pnpm** (global hard-linked store), ESLint (typescript-eslint)

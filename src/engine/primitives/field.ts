@@ -56,6 +56,25 @@ export const fieldRenderer: PrimitiveRenderer = {
       markerRef = `url(#${id})`
     }
 
+    // A casing pass: a wider stroke of a contrasting colour drawn beneath the core, so the line
+    // reads over any background (plate boundaries over dark sea, bright relief, or warm SST). Drawn
+    // first so the core sits on top.
+    const casing = layer.style.casing
+    if (casing) {
+      group
+        .selectAll<SVGPathElement, DrawnLine>('path.field-casing')
+        .data(lines)
+        .join('path')
+        .attr('class', 'field-casing')
+        .attr('d', (l) => l.d)
+        .attr('fill', 'none')
+        .attr('stroke', casing.color)
+        .attr('stroke-width', (l) => l.w + casing.width)
+        .attr('stroke-linecap', 'round')
+        .attr('stroke-linejoin', 'round')
+        .attr('opacity', layer.style.opacity ?? 0.75)
+    }
+
     const sel = group
       .selectAll<SVGPathElement, DrawnLine>('path.field-line')
       .data(lines)

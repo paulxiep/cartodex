@@ -1,6 +1,6 @@
 // Named (view × bindings) combinations - the cells the gallery showcases. Each preset is
-// just data; it deep-links into the composer via the URL hash (toHash). The bivariate and
-// colored-cartogram presets showcase the M2 headline: two datasets bound at once.
+// just data; it deep-links into the composer via the URL hash (toHash). Curated to a spread of
+// nine that spans the four views, the major channels, and distinct domains.
 
 import type { ViewId } from '../engine'
 import type { Binding } from './layers'
@@ -20,7 +20,7 @@ export const PRESETS: Preset[] = [
   {
     id: 'gdp-and-population',
     label: 'GDP + population (bivariate)',
-    description: 'Choropleth GDP per capita with population as proportional bubbles — two datasets at once.',
+    description: 'Choropleth GDP per capita with population as proportional bubbles: two datasets at once.',
     view: 'equirectangular',
     bindings: [
       { channel: 'base', dataset: 'land' },
@@ -29,26 +29,19 @@ export const PRESETS: Preset[] = [
     ],
   },
   {
-    id: 'life-expectancy-globe',
-    label: 'Life expectancy globe',
-    description: 'Life expectancy choropleth on a spin/zoom orthographic globe.',
+    id: 'population-growth',
+    label: 'Population growth',
+    description: 'Yearly population growth on a diverging scale: countries gaining vs shrinking read as opposite colours around zero (World Bank).',
     view: 'orthographic',
     bindings: [
       { channel: 'base', dataset: 'land' },
-      { channel: 'choropleth', dataset: 'life-expectancy' },
+      { channel: 'choropleth', dataset: 'pop-growth' },
     ],
-  },
-  {
-    id: 'population-cartogram',
-    label: 'Population cartogram',
-    description: 'Each country scaled in place by population on an Equal Earth base (non-contiguous).',
-    view: 'equal-earth',
-    bindings: [{ channel: 'area', dataset: 'population' }],
   },
   {
     id: 'colored-cartogram',
     label: 'Colored cartogram',
-    description: 'Countries scaled by population and colored by GDP per capita — area + colour composed.',
+    description: 'Countries scaled by population and colored by GDP per capita: area and colour composed.',
     view: 'equal-earth',
     bindings: [
       { channel: 'area', dataset: 'population' },
@@ -56,14 +49,25 @@ export const PRESETS: Preset[] = [
     ],
   },
   {
-    id: 'polar-flights',
-    label: 'Polar flight routes',
-    description: 'Azimuthal-equidistant polar map with airports and great-circle flight arcs (OpenFlights).',
-    view: 'azimuthal-equidistant',
+    id: 'relief-bathymetry',
+    label: 'Relief & bathymetry',
+    description: 'Global hypsometric relief from ETOPO: land elevation and ocean bathymetry on one diverging sea/land scale (NOAA, public domain).',
+    view: 'equirectangular',
     bindings: [
+      { channel: 'surface', dataset: 'elevation' },
       { channel: 'base', dataset: 'land' },
-      { channel: 'marker', dataset: 'airports' },
-      { channel: 'arc', dataset: 'flights' },
+    ],
+  },
+  {
+    id: 'sst-currents',
+    label: 'SST & currents',
+    description: 'Sea-surface temperature (NOAA OISST monthly climatology) as an ocean-heat surface, with geostrophic surface currents streaming over it: pick a month to see the season shift.',
+    view: 'equirectangular',
+    month: 7,
+    bindings: [
+      { channel: 'surface', dataset: 'sst' },
+      { channel: 'field', dataset: 'currents' },
+      { channel: 'base', dataset: 'land' },
     ],
   },
   {
@@ -78,48 +82,14 @@ export const PRESETS: Preset[] = [
     ],
   },
   {
-    id: 'cargo-traffic',
-    label: 'Cargo shipping traffic',
-    description: 'Shipping lanes weighted by real cargo AIS traffic (commercial and oil & gas, World Bank / IMF).',
-    view: 'equirectangular',
+    id: 'polar-flights',
+    label: 'Polar flight routes',
+    description: 'Azimuthal-equidistant polar map with airports and great-circle flight arcs (OpenFlights).',
+    view: 'azimuthal-equidistant',
     bindings: [
       { channel: 'base', dataset: 'land' },
-      { channel: 'lane', dataset: 'shipping-cargo' },
-    ],
-  },
-  {
-    id: 'winds-currents',
-    label: 'Winds & currents',
-    description: 'Surface winds and ocean surface currents as streamlines, the forces that shape the sea lanes.',
-    view: 'equirectangular',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'field', dataset: 'winds' },
-      { channel: 'field', dataset: 'currents' },
-    ],
-  },
-  {
-    id: 'maritime-globe',
-    label: 'Maritime world',
-    description: 'Seaports, ship-traffic routes and surface winds composed on a spin-and-zoom globe.',
-    view: 'orthographic',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'lane', dataset: 'shipping-all' },
-      { channel: 'field', dataset: 'winds' },
-      { channel: 'marker', dataset: 'ports' },
-    ],
-  },
-  {
-    id: 'ring-of-fire',
-    label: 'Ring of Fire',
-    description: 'Recent significant earthquakes and volcanoes tracing the tectonic plate boundaries.',
-    view: 'equirectangular',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'lane', dataset: 'plate-boundaries' },
-      { channel: 'marker', dataset: 'quakes-recent' },
-      { channel: 'marker', dataset: 'volcanoes' },
+      { channel: 'marker', dataset: 'airports' },
+      { channel: 'arc', dataset: 'flights' },
     ],
   },
   {
@@ -135,93 +105,14 @@ export const PRESETS: Preset[] = [
     ],
   },
   {
-    id: 'great-earthquakes',
-    label: 'Great earthquakes',
-    description: 'The great quakes of the instrumental record (M 7+ since 1900) on a spin-and-zoom globe.',
-    view: 'orthographic',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'marker', dataset: 'quakes-historic' },
-    ],
-  },
-  {
-    id: 'world-cities',
-    label: 'World cities',
-    description: 'The largest cities worldwide, sized by population (Natural Earth).',
-    view: 'equirectangular',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'marker', dataset: 'cities' },
-    ],
-  },
-  {
     id: 'cities-rivers',
     label: 'Cities & rivers',
-    description: 'The largest cities over the world river network — major rivers drawn wider (Natural Earth).',
+    description: 'The largest cities over the world river network: major rivers drawn wider (Natural Earth).',
     view: 'equirectangular',
     bindings: [
       { channel: 'base', dataset: 'land' },
       { channel: 'lane', dataset: 'rivers' },
       { channel: 'marker', dataset: 'cities' },
-    ],
-  },
-  {
-    id: 'cables-lanes',
-    label: 'Cables & shipping lanes',
-    description: 'The two undersea networks together: submarine cables (OSM) over the real shipping lanes.',
-    view: 'equirectangular',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'lane', dataset: 'shipping' },
-      { channel: 'lane', dataset: 'cables' },
-    ],
-  },
-  {
-    id: 'connected-world',
-    label: 'Connected world',
-    description: 'Internet users as a share of population on a spin-and-zoom globe (World Bank).',
-    view: 'orthographic',
-    bindings: [
-      { channel: 'base', dataset: 'land' },
-      { channel: 'choropleth', dataset: 'internet-users' },
-    ],
-  },
-  // M5: hypsometric relief from real ETOPO. A background surface under borders (and, on the globe,
-  // under earthquakes) - the headline scalar layer.
-  {
-    id: 'relief-bathymetry',
-    label: 'Relief & bathymetry',
-    description: 'Global hypsometric relief from ETOPO — land elevation and ocean bathymetry on one diverging sea/land scale (NOAA, public domain).',
-    view: 'equirectangular',
-    bindings: [
-      { channel: 'surface', dataset: 'elevation' },
-      { channel: 'base', dataset: 'land' },
-    ],
-  },
-  {
-    id: 'relief-quakes-globe',
-    label: 'Relief & earthquakes (globe)',
-    description: 'Recent significant earthquakes over ETOPO relief and bathymetry on a spin-and-zoom globe — the seismic belt against the sea floor.',
-    view: 'orthographic',
-    bindings: [
-      { channel: 'surface', dataset: 'elevation' },
-      { channel: 'base', dataset: 'land' },
-      { channel: 'marker', dataset: 'quakes-recent' },
-    ],
-  },
-  // M5b: sea-surface temperature (OISST monthly climatology) as an ocean-heat surface, with the
-  // geostrophic currents that redistribute that heat drawn over it. Month-resolved: opens in July,
-  // and the composer's month control walks the seasonal cycle.
-  {
-    id: 'sst-currents',
-    label: 'SST & currents',
-    description: 'Sea-surface temperature (NOAA OISST monthly climatology) as an ocean-heat surface, with geostrophic surface currents streaming over it — pick a month to see the season shift.',
-    view: 'equirectangular',
-    month: 7,
-    bindings: [
-      { channel: 'surface', dataset: 'sst' },
-      { channel: 'field', dataset: 'currents' },
-      { channel: 'base', dataset: 'land' },
     ],
   },
 ]

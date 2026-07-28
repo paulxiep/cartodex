@@ -74,6 +74,9 @@ export interface Dataset {
   defaultThresholds?: number[]
   /** `surface`: a diverging colour ramp whose two sides meet at a pivot (sea level for relief). */
   defaultDiverging?: DivergingRamp
+  /** `surface`: the field has land values (relief), so the base drops its land fill and the surface
+   *  shows through. Omit for ocean-only surfaces (SST) so land keeps its normal fill. */
+  coversLand?: boolean
   /** month-resolved snapshot: the baked file is per-month (`<id>-MM.json`) and the active month
    *  (from the composer's global month control) selects which one loads. Winds, currents, SST. */
   temporal?: 'monthly'
@@ -360,6 +363,7 @@ export const DATASETS: Record<string, Dataset> = {
     defaultScale: 'threshold',
     defaultThresholds: HYPSOMETRIC_LEVELS,
     defaultDiverging: HYPSOMETRIC_RAMP,
+    coversLand: true,
   },
   // ── Hazards (M4): earthquakes, volcanoes, plate boundaries ──────────────────────────────
   'quakes-recent': {

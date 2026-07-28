@@ -41,6 +41,10 @@ export type DatasetKind = 'region' | 'point' | 'pair' | 'grid' | 'lines' | 'surf
 /** How a value column maps to a color/size channel. `sqrt` is the size default. */
 export type ScaleType = 'linear' | 'log' | 'quantile' | 'threshold' | 'sqrt'
 
+/** Marker glyph for the `point` primitive: distinguishes overlaid point datasets by shape as well
+ *  as colour (airports vs volcanoes vs quakes vs cities). `triangle` is point-up. */
+export type MarkerShape = 'circle' | 'triangle' | 'square' | 'diamond'
+
 /**
  * A colour ramp reference: either a d3-scale-chromatic scheme name (e.g. "YlGnBu") or an
  * explicit list of CSS colour stops interpolated in order. Lets a dataset supply a stock

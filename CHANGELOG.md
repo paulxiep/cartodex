@@ -3,7 +3,7 @@
 Changes to the maps you see and interact with, newest first. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [0.1.3] - Unreleased
+## [0.1.3] - 2026-07-28
 
 A breadth pass on the same platform: new overlays across hazards, reference geography, and
 society, plus scalar surfaces (elevation, sea-surface temperature) and a month control that
