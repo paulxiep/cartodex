@@ -6,16 +6,17 @@
 // lives in the URL hash so any combination is shareable/deep-linkable.
 
 import { createMap, getView, compatible, VIEW_LIST, CHANNEL_LIST } from '../engine'
-import type { Channel, ChannelId, MapHandle, ViewId } from '../engine'
+import type { Channel, ChannelId, MapHandle, ScaleType, ViewId } from '../engine'
 import { buildLayers, bindingKey, attributionsFor } from './layers'
 import type { Binding } from './layers'
+import type { Tier } from './data-loaders'
 import { renderLegend } from './legend'
 import { DATASETS, datasetsOfKind, DOMAIN_ORDER, DOMAIN_LABELS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
 import { applySelection, normalizeSelection } from './taxonomy'
 import type { Taxonomy } from './taxonomy'
 import { PRESETS } from './presets'
-import { parseHash, toHash, defaultMonth } from './state'
+import { toHash, defaultMonth } from './state'
 import type { State } from './state'
 import { VERSION } from './version'
 
@@ -108,6 +109,45 @@ function channelSlotHtml(ch: Channel): string {
     </div>`
 }
 
+// Zoom-driven base-geometry LOD with hysteresis, so a tier holds through small zoom jitter near a
+// threshold. `k` is the engine's normalized zoom ratio (1 = world-fit); the thresholds read well for
+// both the flat clamp [1,12] and the globe scale ratio. Coarse 110m is the world-fit default; finer
+// tiers load lazily as the user zooms in (switch up at 2.5 / 6, back down at the lower 2.0 / 5).
+function tierFor(k: number, current: Tier): Tier {
+  if (current === '110m') return k >= 2.5 ? '50m' : '110m'
+  if (current === '50m') return k >= 6 ? '10m' : k < 2.0 ? '110m' : '50m'
+  return k < 5 ? '50m' : '10m' // current === '10m'
+}
+
+// Parse a URL hash into composer State, validating against the engine's view/channel registries and
+// the dataset catalog (dropping anything stale). Lives here, not in state.ts, so state.ts stays
+// engine/d3-free for the gallery; the composer already imports the engine.
+function parseHash(hash: string, fallback: State): State {
+  const params = new URLSearchParams(hash.replace(/^#/, ''))
+  const viewRaw = params.get('view')
+  const view = VIEW_LIST.some((v) => v.id === viewRaw) ? (viewRaw as ViewId) : fallback.view
+  const monthRaw = Number(params.get('month'))
+  const month = Number.isInteger(monthRaw) && monthRaw >= 1 && monthRaw <= 12 ? monthRaw : fallback.month
+  const bindings: Binding[] = []
+  for (const channel of CHANNEL_LIST) {
+    const raw = params.get(channel.id)
+    if (raw == null) continue
+    if (channel.id === 'base') {
+      bindings.push({ channel: 'base', dataset: 'land' })
+      continue
+    }
+    const items = raw.split(',').filter(Boolean)
+    const chosen = channel.capacity === 'single' ? items.slice(0, 1) : items
+    for (const item of chosen) {
+      const [dataset, scale] = item.split(':')
+      const ds = dataset ? DATASETS[dataset] : undefined
+      if (!ds || ds.kind !== channel.datasetKind) continue
+      bindings.push({ channel: channel.id, dataset: ds.id, ...(scale ? { scale: scale as ScaleType } : {}) })
+    }
+  }
+  return bindings.length ? { view, bindings, month } : fallback
+}
+
 export async function mountComposer(root: HTMLElement): Promise<void> {
   root.innerHTML = `
     <aside class="panel">
@@ -144,6 +184,9 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   let state = normalizeState(parseHash(location.hash, DEFAULT))
   let handle: MapHandle | null = null
   let applyToken = 0
+  // Current base-geometry tier, driven by zoom via the engine's onZoom hook (see below). A view
+  // switch resets zoom to world-fit, so apply() resets this to the coarse default on rebuildView.
+  let baseTier: Tier = '110m'
   // Bindings whose dataset failed to load this render (snapshot missing / source down). The
   // selection stays so it recovers on retry, but the slot is flagged.
   const unavailable = new Set<string>()
@@ -222,16 +265,27 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     return state.bindings.filter((b) => compatible(view, b.channel))
   }
 
+  // Lazy geometry: the engine reports the normalized zoom ratio; map it to a base tier (with
+  // hysteresis) and, when it changes, rebuild through the existing apply() path. Rapid zooming is
+  // coalesced by the applyToken supersede, and the URL/geodata caches make a re-fetch cheap.
+  function onZoom(z: { k: number; view: ViewId }): void {
+    const next = tierFor(z.k, baseTier)
+    if (next === baseTier) return
+    baseTier = next
+    void apply(false)
+  }
+
   async function apply(rebuildView: boolean): Promise<void> {
+    if (rebuildView) baseTier = '110m' // a view switch / deep-link resets zoom to world-fit
     const token = ++applyToken
     const active = renderable()
     loadingEl.hidden = false
-    const { layers, failed, legends } = await buildLayers(active, state.month)
+    const { layers, failed, legends } = await buildLayers(active, state.month, baseTier)
     if (token !== applyToken) return // a newer apply superseded this one
     loadingEl.hidden = true
     unavailable.clear()
     for (const k of failed) unavailable.add(k)
-    if (!handle) handle = createMap(mapEl, { view: state.view, layers })
+    if (!handle) handle = createMap(mapEl, { view: state.view, layers, onZoom })
     else {
       if (rebuildView) handle.setView(state.view)
       handle.setLayers(layers)

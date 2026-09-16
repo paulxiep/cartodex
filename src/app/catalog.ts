@@ -87,6 +87,10 @@ export interface Dataset {
    *  merge by unioning these fields and summing once, so an aggregate (Cargo) and its members
    *  never double-count; the renderer merges the top-most selected node in the taxonomy. */
   valueFields?: string[]
+  /** a finer geometry tier exists at `<snapshot>-fine.json`, fetched when the user zooms in past the
+   *  coarse default (WP-2 lazy geometry). The plain snapshot is the coarse tier. Heavy line/surface
+   *  layers only (rivers today), so the world-fit view draws light geometry and detail loads on zoom. */
+  hasFineTier?: boolean
 }
 
 // ── World Bank WDI indicator table (shared with the producer) ─────────────────────────────
@@ -428,6 +432,9 @@ export const DATASETS: Record<string, Dataset> = {
     attribution: 'Rivers & lakes: Natural Earth 50m rivers + lake centerlines (public domain); major rivers drawn wider by Natural Earth rank',
     // Per-feature inverted scalerank drives lane width (major rivers wider); see buildRivers.
     valueFields: ['rank'],
+    // Heaviest line layer (~107k vertices); a finer tier (rivers-fine.json) loads on deep zoom,
+    // coarse by default so the world-fit view stays light.
+    hasFineTier: true,
   },
   // ── Submarine cables (M4, maritime): the other network under the sea ─────────────────────
   cables: {

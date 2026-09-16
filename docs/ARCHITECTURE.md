@@ -67,7 +67,7 @@ channel draws through one of seven rendering **primitives**, each parameterized 
 
 | Primitive | Renders | Channels | Example datasets |
 |-----------|---------|----------|------------------|
-| `base`          | land / borders | `base` | world-atlas land + country mesh |
+| `base`          | land / borders | `base` | Natural Earth land + country mesh |
 | `region`        | choropleth fill and/or in-place area scaling | `choropleth`, `area` | population, GDP, any fundamental |
 | `region-symbol` | proportional bubble at a region centroid | `bubble` | population, GDP magnitudes |
 | `point`         | sized markers at coordinates | `marker` | airports, seaports |
@@ -119,7 +119,7 @@ interface PrimitiveRenderer {
 - *Great-circle flows*: densify `flow` LineStrings first so they curve correctly; on globe-like
   projections geoPath clips back-hemisphere arcs for free.
 - *Point-like marks* (`point`, `region-symbol`): d3 does not clip points, so a shared far-side test
-  (`lib/clip.ts`) drops marks on a globe's hidden hemisphere.
+  (`lib/cull.ts`, `farSideTest`) drops marks on a globe's hidden hemisphere.
 - *Area encoding*: the `region` primitive scales each feature around its **screen-space centroid**
   (`path.centroid`) by `sqrt(value / max)` when an `area` binding is present, on an equal-area base.
 
@@ -139,6 +139,22 @@ unclosed ring) can render differently per flattening — the strict whole-sphere
 defects the antimeridian-cutting flat views and the hemisphere-clipping globe forgive. The engine
 therefore trusts its input geometry and never "fixes" it per projection; the producers emit geometry
 that is already valid on the sphere (see §5, the surface contour bands).
+
+### Render and delivery performance (M7)
+
+The render path stays single d3-svg and re-projects every frame, so performance is bought without a
+second backend:
+
+- **Viewport culling** (`lib/cull.ts`): a per-frame predicate, built in `paint()` and applied by each
+  primitive, skips features outside the drawn viewport (a flat lon/lat window, a globe spherical cap).
+  It is an optimization, never a correctness requirement; every uncertain case draws.
+- **Multi-resolution geometry, lazy by zoom**: the base geometry ships as coarse/mid/fine tiers
+  (`110m`/`50m`/`10m`) and heavy line layers (rivers) as a coarse default plus a `-fine` tier. The
+  coarse tier draws at world-fit; the engine reports zoom through `MapOptions.onZoom`, and the composer
+  swaps to a finer tier (with hysteresis) by rebuilding through `setLayers`, so detail is fetched only
+  when zoom asks for it. The base tiers are self-hosted, dropping the CDN dependency.
+- **Bundle split**: a `d3` vendor chunk and an `engine` chunk load for the composer, not the gallery;
+  the gallery reads pure view labels (`views/meta.ts`) so its entry ships no d3 or engine code.
 
 ## 4. Engine, app boundary
 
@@ -165,8 +181,10 @@ chrome and reuses the same engine.
 
 Two very different inputs:
 
-- **Geometry**: `world-atlas` TopoJSON from a CDN. Static, open, keyed by **ISO 3166-1 numeric**.
-  Decoded with `topojson-client`. Never committed.
+- **Geometry**: self-hosted multi-resolution TopoJSON tiers (`world-{110m,50m,10m}.json`), built from
+  one Natural Earth 1:10m source (public domain) by the producer and served same-origin, keyed by
+  **ISO 3166-1 numeric**. Decoded with `topojson-client`, never committed. The engine's built-in
+  default stays the `world-atlas` CDN so it still runs standalone; the app supplies the tier URLs.
 - **Thematic / layer values**: the part that updates and rarely arrives clean. The friction is the
   **join key** (sources use country names, ISO alpha-2/-3, or custom codes, and disagree on edge
   cases like Kosovo or Taiwan), not the transport. A **producer** (`scripts/build-data.ts`)

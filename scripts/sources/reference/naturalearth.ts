@@ -15,9 +15,10 @@ const CITIES_URL =
 const RIVERS_URL =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_rivers_lake_centerlines_scale_rank.geojson'
 
-// Finer decimation than the ocean-scale lines (shipping/plates): rivers are viewed zoomed-in on the
-// flat map, so a coarse step reads as blocky. Balances detail against the per-snapshot weight budget.
-const RIVER_STEP_DEG = 0.05
+// River decimation steps (Manhattan degrees). Rivers are the heaviest line layer, so WP-2 bakes two
+// tiers: a light COARSE default (world-fit, where rivers are tiny) and a FINE tier fetched on zoom.
+const RIVER_STEP_COARSE = 0.25 // -> rivers.json (default; sub-pixel at world-fit, under the weight budget)
+const RIVER_STEP_FINE = 0.05 // -> rivers-fine.json (deep zoom; the prior single-tier detail)
 
 // Keep the largest N by population - a legible, budget-safe world-cities layer.
 const TOP_N = 1500
@@ -62,7 +63,7 @@ export async function buildCities(): Promise<RawPoint[]> {
 // at a finer step than the ocean-scale lines. Real geometry only; a river with no rank renders at width 1.
 interface RiverProps { scalerank?: number }
 
-export async function buildRivers(): Promise<FeatureCollection> {
+export async function buildRivers(): Promise<{ coarse: FeatureCollection; fine: FeatureCollection }> {
   const raw = await getJson<FeatureCollection<LineString | MultiLineString, RiverProps>>(RIVERS_URL)
   // Compute the max scalerank present so the inversion is self-contained (no magic constant): a
   // river at the top rank keeps a weight of 1, the most major river gets `maxRank + 1`.
@@ -71,25 +72,34 @@ export async function buildRivers(): Promise<FeatureCollection> {
     const r = f.properties?.scalerank
     if (typeof r === 'number' && Number.isFinite(r) && r > maxRank) maxRank = r
   }
-  const features: Feature<LineString>[] = []
-  for (const f of raw.features) {
-    const g = f.geometry
-    const parts: Position[][] =
-      g.type === 'MultiLineString'
-        ? (g as MultiLineString).coordinates
-        : g.type === 'LineString'
-          ? [(g as LineString).coordinates]
-          : []
-    const sr = f.properties?.scalerank
-    const rank = typeof sr === 'number' && Number.isFinite(sr) ? maxRank - sr + 1 : 1
-    for (const part of parts) {
-      const coords = simplify(part, RIVER_STEP_DEG)
-      if (coords.length >= 2) {
-        features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { rank } })
+  // Decimate the shared source at a given step into a lane network (one fetch, two tiers).
+  const build = (step: number): FeatureCollection => {
+    const features: Feature<LineString>[] = []
+    for (const f of raw.features) {
+      const g = f.geometry
+      const parts: Position[][] =
+        g.type === 'MultiLineString'
+          ? (g as MultiLineString).coordinates
+          : g.type === 'LineString'
+            ? [(g as LineString).coordinates]
+            : []
+      const sr = f.properties?.scalerank
+      const rank = typeof sr === 'number' && Number.isFinite(sr) ? maxRank - sr + 1 : 1
+      for (const part of parts) {
+        const coords = simplify(part, step)
+        if (coords.length >= 2) {
+          features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords }, properties: { rank } })
+        }
       }
     }
+    return { type: 'FeatureCollection', features }
   }
-  const verts = features.reduce((s, f) => s + f.geometry.coordinates.length, 0)
-  console.log(`  rivers: ${features.length} segments, ${verts} vertices (Natural Earth 10m rivers + lake centerlines, scale rank, public domain)`)
-  return { type: 'FeatureCollection', features }
+  const coarse = build(RIVER_STEP_COARSE)
+  const fine = build(RIVER_STEP_FINE)
+  const verts = (fc: FeatureCollection): number =>
+    fc.features.reduce((s, f) => s + (f.geometry as LineString).coordinates.length, 0)
+  console.log(
+    `  rivers: coarse ${coarse.features.length} seg / ${verts(coarse)} v, fine ${fine.features.length} seg / ${verts(fine)} v (Natural Earth 10m rivers + lake centerlines, public domain)`,
+  )
+  return { coarse, fine }
 }

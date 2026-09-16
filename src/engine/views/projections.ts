@@ -12,7 +12,7 @@ const sphere = SPHERE as unknown as GeoGeometryObjects
 
 export const equirectangular: View = {
   id: 'equirectangular',
-  label: 'Equirectangular',
+  label: 'Equirectangular', // keep in sync with VIEW_META in ./meta.ts
   kind: 'projection',
   build(width, height) {
     const projection = geoEquirectangular().fitSize([width, height], sphere)
@@ -22,7 +22,7 @@ export const equirectangular: View = {
 
 export const equalEarth: View = {
   id: 'equal-earth',
-  label: 'Equal Earth',
+  label: 'Equal Earth', // keep in sync with VIEW_META in ./meta.ts
   kind: 'projection',
   equalArea: true, // density-preserving base; the `area` cartogram channel builds on it
   build(width, height) {
@@ -33,7 +33,7 @@ export const equalEarth: View = {
 
 export const azimuthalEquidistant: View = {
   id: 'azimuthal-equidistant',
-  label: 'Azimuthal Equidistant (Polar)',
+  label: 'Azimuthal Equidistant (Polar)', // keep in sync with VIEW_META in ./meta.ts
   kind: 'projection',
   rotatable: true,
   showCenter: true,
@@ -49,7 +49,7 @@ export const azimuthalEquidistant: View = {
 
 export const orthographic: View = {
   id: 'orthographic',
-  label: 'Orthographic Globe',
+  label: 'Orthographic Globe', // keep in sync with VIEW_META in ./meta.ts
   kind: 'projection',
   rotatable: true,
   build(width, height) {

@@ -133,6 +133,10 @@ export interface PrimitiveRenderer {
 export interface MapOptions {
   view: ViewId
   layers: ResolvedLayer[]
+  /** Called when the user's zoom level changes, with the normalized zoom ratio `k` (1 = world-fit,
+   *  higher = zoomed in) and the active view. The app uses it to drive lazy geometry tiers (fetch a
+   *  finer tier when zoomed in). Optional - the engine works, and stays dataset-free, without it. */
+  onZoom?: (z: { k: number; view: ViewId }) => void
 }
 
 export interface MapHandle {

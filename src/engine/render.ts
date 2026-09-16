@@ -202,6 +202,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
       attachRotate(svg, proj, () => {
         savedRotate = proj.rotate()
         savedScaleK = baseRotatableScale ? proj.scale() / baseRotatableScale : null
+        options.onZoom?.({ k: savedScaleK ?? 1, view: viewId })
         paint()
       })
     } else if (flatProjection && projector.path && baseFlatScale != null && baseFlatTranslate != null) {
@@ -219,6 +220,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
         savedFlatK = proj.scale() / baseScale
         const [tx, ty] = proj.translate()
         savedPan = [tx - baseTranslate[0], ty - baseTranslate[1]]
+        options.onZoom?.({ k: savedFlatK, view: viewId })
       }
       const dragBehavior = drag<SVGSVGElement, unknown>().on('drag', (event) => {
         const [tx, ty] = proj.translate()
