@@ -78,6 +78,7 @@ function clampFlatPan(projection: GeoProjection, path: GeoPath, width: number, h
 }
 import { getView } from './views'
 import { getPrimitive } from './primitives'
+import { makeCull } from './lib/cull'
 import { SPHERE } from './views/_svgProjector'
 
 const sphere = SPHERE as unknown as GeoGeometryObjects
@@ -168,9 +169,14 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
         spherePath?.attr('d', path(sphere) ?? '')
         gratPath?.attr('d', path(geoGraticule10()) ?? '')
       }
+      // Build the viewport cull once per frame from the current (mutated) projector; a per-frame
+      // context carries it to each primitive. Absent (world-fit flat, whole-sphere polar) means
+      // draw everything.
+      const cull = makeCull(ctx) ?? undefined
+      const frameCtx: RenderContext = cull ? { ...ctx, cull } : ctx
       for (const { group, layer } of layerGroups) {
         group.selectAll('*').remove()
-        getPrimitive(layer.primitive).drawSVG(group, layer, ctx)
+        getPrimitive(layer.primitive).drawSVG(group, layer, frameCtx)
       }
       if (centerGroup && projector.projection) {
         centerGroup.selectAll('*').remove()

@@ -1,11 +1,12 @@
-// `point` primitive - markers at coordinates (ports, airports, capitals). Radius maps
-// from value when a value table is present, else a constant. Far-side points on a globe
-// are dropped via the shared far-side test (see lib/clip).
+// `point` primitive - markers at coordinates (ports, airports, capitals). Radius maps from value
+// when a value table is present, else a constant. Off-viewport marks are dropped by the viewport
+// cull (flat window / globe cap on the bbox); an exact far-side test (lib/cull farSideTest) then
+// hides marks on a globe's hidden hemisphere, which the padded cap does not fully cover.
 
 import type { Feature, Point } from 'geojson'
 import type { MarkerShape, PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
 import { radiusScale, valueOf } from '../lib/scales'
-import { farSideTest } from '../lib/clip'
+import { farSideTest } from '../lib/cull'
 import { showTooltip, hideTooltip } from '../lib/tooltip'
 
 interface PlacedPoint {
@@ -51,9 +52,13 @@ export const pointRenderer: PrimitiveRenderer = {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext) {
     const domain = layer.valueDomain ?? [0, 1]
     const r = radiusScale(domain, layer.style.radiusRange ?? [1.5, 7])
+    // ctx.cull drops off-viewport marks (flat window; globe cap on the bbox). The globe cap pads its
+    // bounding-circle, so an exact horizon test on the actual coordinate hides far-side marks in the
+    // pad ring (d3 folds the far hemisphere onto the disc rather than returning null for it).
     const isFarSide = farSideTest(ctx)
     const placed: PlacedPoint[] = []
     for (const f of layer.features.features) {
+      if (ctx.cull?.(f)) continue
       const lonlat = pointCoord(f)
       if (!lonlat) continue
       if (isFarSide?.(lonlat)) continue

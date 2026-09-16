@@ -20,6 +20,7 @@ export const flowRenderer: PrimitiveRenderer = {
 
     const coordinates: Position[][] = []
     for (const f of layer.features.features) {
+      if (ctx.cull?.(f)) continue
       if (f.geometry?.type !== 'LineString') continue
       if (minValue != null) {
         const v = valueOf(layer, f)

@@ -7,7 +7,7 @@
 
 import type { GeoPath, GeoProjection } from 'd3-geo'
 import type { Selection } from 'd3-selection'
-import type { FeatureCollection } from 'geojson'
+import type { Feature, FeatureCollection } from 'geojson'
 import type { MarkerShape, Primitive, ScaleSpec } from './model'
 
 // The dependency-free core vocabulary lives in model.ts (so pure consumers - the app catalog
@@ -113,6 +113,10 @@ export interface RenderContext {
   readonly projector: Projector
   readonly width: number
   readonly height: number
+  /** Optional per-frame viewport cull test: `true` = this feature is safely outside the drawn
+   *  viewport and may be skipped. Built in paint() from the current projector; absent means draw
+   *  everything. An optimization, never a correctness requirement (see lib/cull). */
+  readonly cull?: (f: Feature) => boolean
 }
 
 /** SVG group selection type alias used by the d3-svg primitive renderers. */

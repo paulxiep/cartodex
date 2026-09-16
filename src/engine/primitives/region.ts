@@ -70,9 +70,12 @@ export const regionRenderer: PrimitiveRenderer = {
     if (!path) return
     const fill = fillFn(layer)
     const transform = areaTransform(layer, path)
+    const features = ctx.cull
+      ? layer.features.features.filter((f) => !ctx.cull!(f))
+      : layer.features.features
     const sel = group
       .selectAll<SVGPathElement, Feature>('path')
-      .data(layer.features.features)
+      .data(features)
       .join('path')
       .attr('d', (f) => path(f) ?? '')
       .attr('fill', fill)

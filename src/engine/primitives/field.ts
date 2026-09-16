@@ -28,6 +28,7 @@ export const fieldRenderer: PrimitiveRenderer = {
 
     const lines: DrawnLine[] = []
     for (const f of layer.features.features) {
+      if (ctx.cull?.(f)) continue
       if (f.geometry?.type !== 'LineString') continue
       const d = path(f.geometry as LineString)
       if (!d) continue // fully clipped (e.g. back of the globe)

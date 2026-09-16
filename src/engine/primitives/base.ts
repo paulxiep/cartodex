@@ -8,9 +8,12 @@ export const baseRenderer: PrimitiveRenderer = {
     const path = ctx.projector.path
     if (!path) return
     const s = layer.style
+    const features = ctx.cull
+      ? layer.features.features.filter((f) => !ctx.cull!(f))
+      : layer.features.features
     group
       .selectAll<SVGPathElement, GeoJSON.Feature>('path')
-      .data(layer.features.features)
+      .data(features)
       .join('path')
       .attr('d', (f) => path(f) ?? '')
       .attr('fill', s.fill ?? 'none')

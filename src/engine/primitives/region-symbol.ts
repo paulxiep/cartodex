@@ -3,15 +3,15 @@
 // data - it reads magnitudes (population, GDP) as bubbles instead of a near-monochrome
 // choropleth, and coexists with a choropleth on the same map (bivariate).
 //
-// Centroid via d3 geoCentroid (spherical) then projected, so it tracks every view; bubbles
-// on the hidden hemisphere of a globe are dropped via the shared far-side test. Larger
-// bubbles draw first so smaller ones stay clickable on top.
+// Centroid via d3 geoCentroid (spherical) then projected, so it tracks every view; off-viewport
+// regions are dropped by the viewport cull, and far-side bubbles by an exact horizon test on the
+// centroid (lib/cull farSideTest). Larger bubbles draw first so smaller ones stay clickable on top.
 
 import { geoCentroid } from 'd3-geo'
 import type { Feature } from 'geojson'
 import type { PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
 import { radiusScale } from '../lib/scales'
-import { farSideTest } from '../lib/clip'
+import { farSideTest } from '../lib/cull'
 import { showTooltip, hideTooltip } from '../lib/tooltip'
 
 interface PlacedBubble {
@@ -31,9 +31,12 @@ export const regionSymbolRenderer: PrimitiveRenderer = {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext) {
     const domain = layer.valueDomain ?? [0, 1]
     const r = radiusScale(domain, layer.style.radiusRange ?? [2, 26])
+    // ctx.cull drops whole off-viewport regions; the bubble is drawn at the region CENTROID, so the
+    // far side of a globe is decided by an exact horizon test on that centroid, not the region bbox.
     const isFarSide = farSideTest(ctx)
     const placed: PlacedBubble[] = []
     for (const f of layer.features.features) {
+      if (ctx.cull?.(f)) continue
       const v = f.id == null ? undefined : layer.values?.get(f.id)
       // Proportional area needs a positive magnitude: non-positive values (e.g. a signed
       // indicator like net migration) are no-data for sizing, not a zero/negative bubble.
