@@ -4,8 +4,9 @@
 // choropleth, and coexists with a choropleth on the same map (bivariate).
 //
 // Centroid via d3 geoCentroid (spherical) then projected, so it tracks every view; off-viewport
-// regions are dropped by the viewport cull, and far-side bubbles by an exact horizon test on the
-// centroid (lib/cull farSideTest). Larger bubbles draw first so smaller ones stay clickable on top.
+// regions are dropped by the viewport cull (padded by the largest bubble), and far-side bubbles by an
+// exact horizon test on the centroid (lib/cull farSideTest). Larger bubbles draw first so smaller ones
+// stay clickable on top.
 
 import { geoCentroid } from 'd3-geo'
 import type { Feature } from 'geojson'
@@ -22,6 +23,8 @@ interface PlacedBubble {
   value: number
 }
 
+const RADIUS_RANGE: [number, number] = [2, 26]
+
 function label(f: Feature, value: number): string {
   const name = (f.properties?.['name'] as string | undefined) ?? String(f.id ?? '')
   return `${name}: ${value.toLocaleString()}`
@@ -30,13 +33,12 @@ function label(f: Feature, value: number): string {
 export const regionSymbolRenderer: PrimitiveRenderer = {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext) {
     const domain = layer.valueDomain ?? [0, 1]
-    const r = radiusScale(domain, layer.style.radiusRange ?? [2, 26])
-    // ctx.cull drops whole off-viewport regions; the bubble is drawn at the region CENTROID, so the
-    // far side of a globe is decided by an exact horizon test on that centroid, not the region bbox.
+    const r = radiusScale(domain, layer.style.radiusRange ?? RADIUS_RANGE)
+    // The bubble is drawn at the region CENTROID, so the far side of a globe is decided by an exact
+    // horizon test on that centroid, not the region bbox.
     const isFarSide = farSideTest(ctx)
     const placed: PlacedBubble[] = []
     for (const f of layer.features.features) {
-      if (ctx.cull?.(f)) continue
       const v = f.id == null ? undefined : layer.values?.get(f.id)
       // Proportional area needs a positive magnitude: non-positive values (e.g. a signed
       // indicator like net migration) are no-data for sizing, not a zero/negative bubble.
@@ -64,4 +66,5 @@ export const regionSymbolRenderer: PrimitiveRenderer = {
       .on('pointermove', (e: PointerEvent, d) => showTooltip(label(d.feature, d.value), e.clientX, e.clientY))
       .on('pointerleave', hideTooltip)
   },
+  cullPadding: (layer) => (layer.style.radiusRange ?? RADIUS_RANGE)[1] + (layer.style.strokeWidth ?? 0.5),
 }

@@ -1,7 +1,7 @@
 // `point` primitive - markers at coordinates (ports, airports, capitals). Radius maps from value
 // when a value table is present, else a constant. Off-viewport marks are dropped by the viewport
-// cull (flat window / globe cap on the bbox); an exact far-side test (lib/cull farSideTest) then
-// hides marks on a globe's hidden hemisphere, which the padded cap does not fully cover.
+// cull before drawing (padded by the largest glyph); an exact far-side test (lib/cull farSideTest)
+// hides marks on a globe's hidden hemisphere.
 
 import type { Feature, Point } from 'geojson'
 import type { MarkerShape, PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
@@ -16,6 +16,10 @@ interface PlacedPoint {
   feature: Feature
 }
 
+const RADIUS_RANGE: [number, number] = [1.5, 7]
+// The farthest any glyph reaches from its centre, in radii (the lifted point-up triangle).
+const GLYPH_REACH = 1.1
+
 function pointCoord(f: Feature): [number, number] | null {
   if (f.geometry?.type !== 'Point') return null
   const c = (f.geometry as Point).coordinates
@@ -29,7 +33,7 @@ function pointCoord(f: Feature): [number, number] | null {
 function symbolPath(shape: MarkerShape | undefined, x: number, y: number, r: number): string {
   switch (shape) {
     case 'triangle': {
-      const h = r * 1.1 // lift so the point-up triangle balances a circle of radius r
+      const h = r * GLYPH_REACH // lift so the point-up triangle balances a circle of radius r
       return `M${x},${y - h} L${x + h * 0.9},${y + h * 0.6} L${x - h * 0.9},${y + h * 0.6} Z`
     }
     case 'square': {
@@ -51,14 +55,12 @@ function label(f: Feature): string {
 export const pointRenderer: PrimitiveRenderer = {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext) {
     const domain = layer.valueDomain ?? [0, 1]
-    const r = radiusScale(domain, layer.style.radiusRange ?? [1.5, 7])
-    // ctx.cull drops off-viewport marks (flat window; globe cap on the bbox). The globe cap pads its
-    // bounding-circle, so an exact horizon test on the actual coordinate hides far-side marks in the
-    // pad ring (d3 folds the far hemisphere onto the disc rather than returning null for it).
+    const r = radiusScale(domain, layer.style.radiusRange ?? RADIUS_RANGE)
+    // The viewport cull has already dropped off-screen marks. d3 folds the far hemisphere onto the disc
+    // rather than returning null for it, so an exact horizon test hides far-side marks.
     const isFarSide = farSideTest(ctx)
     const placed: PlacedPoint[] = []
     for (const f of layer.features.features) {
-      if (ctx.cull?.(f)) continue
       const lonlat = pointCoord(f)
       if (!lonlat) continue
       if (isFarSide?.(lonlat)) continue
@@ -80,4 +82,5 @@ export const pointRenderer: PrimitiveRenderer = {
       .on('pointermove', (e: PointerEvent, d) => showTooltip(label(d.feature), e.clientX, e.clientY))
       .on('pointerleave', hideTooltip)
   },
+  cullPadding: (layer) => GLYPH_REACH * (layer.style.radiusRange ?? RADIUS_RANGE)[1] + (layer.style.strokeWidth ?? 0.4),
 }

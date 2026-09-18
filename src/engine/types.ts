@@ -7,7 +7,7 @@
 
 import type { GeoPath, GeoProjection } from 'd3-geo'
 import type { Selection } from 'd3-selection'
-import type { Feature, FeatureCollection } from 'geojson'
+import type { FeatureCollection } from 'geojson'
 import type { MarkerShape, Primitive, ScaleSpec } from './model'
 
 // The dependency-free core vocabulary lives in model.ts (so pure consumers - the app catalog
@@ -35,10 +35,9 @@ export type ViewId =
   | 'orthographic'
 
 /**
- * A Projector turns a lon/lat into screen coordinates (or `null` when the point is
- * clipped, e.g. the back of an orthographic globe), and carries the d3 `path`
- * generator for area/line features plus the raw projection (for graticules and
- * drag-to-rotate).
+ * A Projector turns a lon/lat into screen coordinates (`null` only when d3 yields no point; a
+ * globe's far-side points still project, folded onto the disc), and carries the d3 `path`
+ * generator for area/line features plus the raw projection (for graticules and drag-to-rotate).
  */
 export interface Projector {
   project(coord: [number, number]): [number, number] | null
@@ -48,13 +47,16 @@ export interface Projector {
 
 export interface View {
   readonly id: ViewId
-  readonly label: string
   readonly kind: ViewKind
   /** Equal-area base: required for the `area` channel (density-equalization assumes true
    *  areas). Only `equal-earth` sets this today. */
   readonly equalArea?: boolean
   /** Globe-like views: drag rotates the projection center (re-centers), wheel zooms. */
   readonly rotatable?: boolean
+  /** Rotatable views: the angular distance (radians) from the projection center to a point `r`
+   *  projection-scale units from it on screen. Lets the viewport cull size its visible cap to the
+   *  frame; without it the cull falls back to the clip angle. */
+  readonly radialAngle?: (r: number) => number
   /** Draw a marker at the projection center (helps read azimuthal / polar maps). */
   readonly showCenter?: boolean
   build(width: number, height: number): Projector
@@ -113,10 +115,6 @@ export interface RenderContext {
   readonly projector: Projector
   readonly width: number
   readonly height: number
-  /** Optional per-frame viewport cull test: `true` = this feature is safely outside the drawn
-   *  viewport and may be skipped. Built in paint() from the current projector; absent means draw
-   *  everything. An optimization, never a correctness requirement (see lib/cull). */
-  readonly cull?: (f: Feature) => boolean
 }
 
 /** SVG group selection type alias used by the d3-svg primitive renderers. */
@@ -128,12 +126,16 @@ export type SvgGroup = Selection<SVGGElement, unknown, null, undefined>
  */
 export interface PrimitiveRenderer {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext): void
+  /** How far (px) this primitive draws past a feature's geometry, e.g. a marker's radius. The viewport
+   *  cull widens its window by this much; `null` draws the layer without culling (its drawing moves
+   *  geometry). Omitted means 0. */
+  cullPadding?(layer: ResolvedLayer): number | null
 }
 
 export interface MapOptions {
   view: ViewId
   layers: ResolvedLayer[]
-  /** Called when the user's zoom level changes, with the normalized zoom ratio `k` (1 = world-fit,
+  /** Called on each zoom step (a wheel event), with the normalized zoom ratio `k` (1 = world-fit,
    *  higher = zoomed in) and the active view. The app uses it to drive lazy geometry tiers (fetch a
    *  finer tier when zoomed in). Optional - the engine works, and stays dataset-free, without it. */
   onZoom?: (z: { k: number; view: ViewId }) => void

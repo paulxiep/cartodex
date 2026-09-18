@@ -10,15 +10,14 @@ data as before.
 
 ### Faster to open
 - The world outline now loads light by default and sharpens as you zoom in, so the first view paints
-  sooner. Coastlines, borders, and the river network fill in more detail the closer you look, and
-  ease back out without stutter.
+  sooner. Coastlines, borders, and the river network fill in more detail the closer you look.
 - The base map is served from the app's own storage rather than a third-party CDN, so it loads
   alongside the rest of the data.
 - The gallery no longer loads the map engine until you open a map, so the front page is lighter.
 
 ### Smoother when zoomed
-- Only the part of the map in view is drawn, so panning and spinning the globe stay responsive even
-  with dense layers (rivers, relief, earthquakes) turned on.
+- Features outside the view are skipped, so panning and spinning the globe stay responsive with dense
+  layers such as rivers, shipping lanes and earthquakes turned on.
 
 ## [0.1.2] - 2026-07-28
 

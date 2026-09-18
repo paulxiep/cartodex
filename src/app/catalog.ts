@@ -432,8 +432,9 @@ export const DATASETS: Record<string, Dataset> = {
     attribution: 'Rivers & lakes: Natural Earth 50m rivers + lake centerlines (public domain); major rivers drawn wider by Natural Earth rank',
     // Per-feature inverted scalerank drives lane width (major rivers wider); see buildRivers.
     valueFields: ['rank'],
-    // Heaviest line layer (~107k vertices); a finer tier (rivers-fine.json) loads on deep zoom,
-    // coarse by default so the world-fit view stays light.
+    // Heaviest line layer: the coarse default (rivers.json, ~33k vertices) keeps the world-fit view
+    // light, and the finer tier (rivers-fine.json, ~107k vertices) loads once zoom leaves the default
+    // base tier.
     hasFineTier: true,
   },
   // ── Submarine cables (M4, maritime): the other network under the sea ─────────────────────

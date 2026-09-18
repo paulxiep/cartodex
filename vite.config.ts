@@ -22,13 +22,12 @@ export default defineConfig({
         changelog: 'changelog.html',
       },
       output: {
-        // Split the heavy, cacheable code the composer/bench need into vendor chunks so the gallery
+        // Split the heavy, cacheable code the composer needs into vendor chunks so the gallery
         // (index.html) entry ships neither: `d3` (d3-* + topojson-client) and `engine` (src/engine/*).
-        // views/meta.ts is pure view metadata the gallery imports, so it must NOT fall into `engine`.
         manualChunks(id: string) {
           const p = id.replace(/\\/g, '/')
-          // views/meta.ts is pure view labels the gallery imports; no engine module imports it, so
-          // leaving it unassigned lets it fold into the gallery/app chunk, not the engine chunk.
+          // views/meta.ts holds the pure view labels the gallery and composer import. No engine module
+          // imports it, so leaving it unassigned folds it into the app chunks rather than `engine`.
           if (p.includes('/src/engine/views/meta')) return
           if (p.includes('/src/engine/')) return 'engine'
           if (/\/node_modules\/(d3-|topojson-client)/.test(p)) return 'd3'

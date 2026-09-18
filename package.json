@@ -46,6 +46,7 @@
     "@types/topojson-simplify": "^3.0.3",
     "@types/topojson-specification": "^1.0.5",
     "d3-contour": "^4.0.2",
+    "d3-geo-projection": "^4.0.0",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "lerc": "^4.1.1",

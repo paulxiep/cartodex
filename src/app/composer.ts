@@ -6,10 +6,12 @@
 // lives in the URL hash so any combination is shareable/deep-linkable.
 
 import { createMap, getView, compatible, VIEW_LIST, CHANNEL_LIST } from '../engine'
+import { VIEW_META } from '../engine/views/meta'
 import type { Channel, ChannelId, MapHandle, ScaleType, ViewId } from '../engine'
-import { buildLayers, bindingKey, attributionsFor } from './layers'
+import { buildLayers, bindingKey, attributionsFor, tierChangeAffects } from './layers'
 import type { Binding } from './layers'
-import type { Tier } from './data-loaders'
+import { DEFAULT_TIER, tierFor } from './tiers'
+import type { Tier } from './tiers'
 import { renderLegend } from './legend'
 import { DATASETS, datasetsOfKind, DOMAIN_ORDER, DOMAIN_LABELS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
 import type { Dataset } from './catalog'
@@ -109,16 +111,6 @@ function channelSlotHtml(ch: Channel): string {
     </div>`
 }
 
-// Zoom-driven base-geometry LOD with hysteresis, so a tier holds through small zoom jitter near a
-// threshold. `k` is the engine's normalized zoom ratio (1 = world-fit); the thresholds read well for
-// both the flat clamp [1,12] and the globe scale ratio. Coarse 110m is the world-fit default; finer
-// tiers load lazily as the user zooms in (switch up at 2.5 / 6, back down at the lower 2.0 / 5).
-function tierFor(k: number, current: Tier): Tier {
-  if (current === '110m') return k >= 2.5 ? '50m' : '110m'
-  if (current === '50m') return k >= 6 ? '10m' : k < 2.0 ? '110m' : '50m'
-  return k < 5 ? '50m' : '10m' // current === '10m'
-}
-
 // Parse a URL hash into composer State, validating against the engine's view/channel registries and
 // the dataset catalog (dropping anything stale). Lives here, not in state.ts, so state.ts stays
 // engine/d3-free for the gallery; the composer already imports the engine.
@@ -186,7 +178,10 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
   let applyToken = 0
   // Current base-geometry tier, driven by zoom via the engine's onZoom hook (see below). A view
   // switch resets zoom to world-fit, so apply() resets this to the coarse default on rebuildView.
-  let baseTier: Tier = '110m'
+  let baseTier: Tier = DEFAULT_TIER
+  // A view switch (or deep link) waiting for its apply to land. It survives a superseded apply, so
+  // whichever apply lands next still switches the view.
+  let pendingView = false
   // Bindings whose dataset failed to load this render (snapshot missing / source down). The
   // selection stays so it recovers on retry, but the slot is flagged.
   const unavailable = new Set<string>()
@@ -196,7 +191,7 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     const btn = document.createElement('button')
     btn.className = 'view-btn'
     btn.dataset['view'] = v.id
-    btn.textContent = v.label
+    btn.textContent = VIEW_META[v.id]
     btn.addEventListener('click', () => void setView(v.id))
     viewsEl.appendChild(btn)
   }
@@ -265,18 +260,24 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     return state.bindings.filter((b) => compatible(view, b.channel))
   }
 
-  // Lazy geometry: the engine reports the normalized zoom ratio; map it to a base tier (with
-  // hysteresis) and, when it changes, rebuild through the existing apply() path. Rapid zooming is
-  // coalesced by the applyToken supersede, and the URL/geodata caches make a re-fetch cheap.
+  // Lazy geometry: the engine reports the zoom ratio on each zoom step; map it to a base tier (with
+  // hysteresis) and rebuild through apply() only when a bound layer depends on the tier. The engine
+  // swaps layers in place, so a rebuild landing mid-gesture doesn't interrupt it. Zoom reports from a
+  // view that is being switched away are ignored: the switch resets zoom and the tier.
   function onZoom(z: { k: number; view: ViewId }): void {
-    const next = tierFor(z.k, baseTier)
+    if (pendingView) return
+    const next = tierFor(z.k, baseTier, !!getView(z.view).rotatable)
     if (next === baseTier) return
+    const affected = tierChangeAffects(renderable(), baseTier, next)
     baseTier = next
-    void apply(false)
+    if (affected) void apply(false)
   }
 
   async function apply(rebuildView: boolean): Promise<void> {
-    if (rebuildView) baseTier = '110m' // a view switch / deep-link resets zoom to world-fit
+    if (rebuildView) {
+      pendingView = true
+      baseTier = DEFAULT_TIER // a view switch / deep-link resets zoom to world-fit
+    }
     const token = ++applyToken
     const active = renderable()
     loadingEl.hidden = false
@@ -287,9 +288,10 @@ export async function mountComposer(root: HTMLElement): Promise<void> {
     for (const k of failed) unavailable.add(k)
     if (!handle) handle = createMap(mapEl, { view: state.view, layers, onZoom })
     else {
-      if (rebuildView) handle.setView(state.view)
+      if (pendingView) handle.setView(state.view)
       handle.setLayers(layers)
     }
+    pendingView = false
     renderLegend(legendEl, legends)
     history.replaceState(null, '', toHash(state))
     refreshControls()

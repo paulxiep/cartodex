@@ -70,12 +70,9 @@ export const regionRenderer: PrimitiveRenderer = {
     if (!path) return
     const fill = fillFn(layer)
     const transform = areaTransform(layer, path)
-    const features = ctx.cull
-      ? layer.features.features.filter((f) => !ctx.cull!(f))
-      : layer.features.features
     const sel = group
       .selectAll<SVGPathElement, Feature>('path')
-      .data(features)
+      .data(layer.features.features)
       .join('path')
       .attr('d', (f) => path(f) ?? '')
       .attr('fill', fill)
@@ -85,4 +82,7 @@ export const regionRenderer: PrimitiveRenderer = {
       .on('pointerleave', hideTooltip)
     if (transform) sel.attr('transform', (f) => transform(f))
   },
+  // The cartogram scales a region up to AREA_CLAMP times around its centroid, far past its own
+  // bounds, so a layer with an area binding is drawn without culling.
+  cullPadding: (layer) => (layer.area ? null : (layer.style.strokeWidth ?? 0.4)),
 }

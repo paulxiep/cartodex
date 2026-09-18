@@ -7,6 +7,7 @@
 //     the rest of the map still renders and the composer can flag it.
 // Draw order is fixed by channel: base, region, arcs, bubbles, markers (markers on top).
 
+import type { FeatureCollection } from 'geojson'
 import { loadCountries, getChannel } from '../engine'
 import type { ChannelId, ResolvedLayer, ScaleSpec, ScaleType } from '../engine'
 import { DATASETS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
@@ -15,7 +16,8 @@ import { markerStyleFor, PLATE_STYLE, SEA_BLUE, CABLE_AMBER, WINDS_COLOR, CURREN
 import { topmostSelected } from './taxonomy'
 import type { Taxonomy } from './taxonomy'
 import { baseGeometryUrl, loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged, loadSurfaceData } from './data-loaders'
-import type { Tier } from './data-loaders'
+import { DEFAULT_TIER, coarserTier, isFine } from './tiers'
+import type { Tier } from './tiers'
 
 export interface Binding {
   channel: ChannelId
@@ -41,6 +43,34 @@ export function bindingKey(b: Binding): string {
   return b.channel === 'base' ? 'base' : `${b.channel}:${b.dataset}`
 }
 
+// Channels drawn on country geometry, which changes with every base tier.
+const COUNTRY_CHANNELS: ReadonlySet<ChannelId> = new Set<ChannelId>(['base', 'choropleth', 'area', 'bubble'])
+
+/** Whether moving from one base tier to another changes any of these bindings' layers: country
+ *  geometry changes with every tier, a dataset's `-fine` snapshot only when the move crosses the
+ *  default tier. */
+export function tierChangeAffects(bindings: Binding[], from: Tier, to: Tier): boolean {
+  const fineChanged = isFine(from) !== isFine(to)
+  return bindings.some((b) => COUNTRY_CHANNELS.has(b.channel) || (fineChanged && !!DATASETS[b.dataset]?.hasFineTier))
+}
+
+// Countries for a tier. A finer tier that fails to load falls back to the next coarser one, so a
+// missing or unreachable file costs detail rather than the base, choropleth and bubble layers.
+const reportedTiers = new Set<Tier>()
+async function countriesAt(tier: Tier): Promise<FeatureCollection> {
+  try {
+    return await loadCountries(baseGeometryUrl(tier))
+  } catch (e) {
+    const coarser = coarserTier(tier)
+    if (!coarser) throw e
+    if (!reportedTiers.has(tier)) {
+      reportedTiers.add(tier)
+      console.warn(`base tier ${tier} unavailable, using ${coarser}: ${(e as Error).message}`)
+    }
+    return countriesAt(coarser)
+  }
+}
+
 function scaleSpecFor(ds: Dataset, channel: ChannelId, override?: ScaleType): ScaleSpec {
   const type = override ?? ds.defaultScale ?? getChannel(channel).defaultScaleType
   // A dataset may pin explicit threshold breaks (hypsometric levels) and a diverging ramp
@@ -52,7 +82,7 @@ function scaleSpecFor(ds: Dataset, channel: ChannelId, override?: ScaleType): Sc
 // with country outlines drawn on top of it; the darker stroke reads over bright hypsometric
 // colour. Normal maps keep the opaque land fill over the sphere.
 async function resolveBase(tier: Tier, bordersOnly = false): Promise<ResolvedLayer> {
-  const features = await loadCountries(baseGeometryUrl(tier))
+  const features = await countriesAt(tier)
   return {
     id: 'base',
     primitive: 'base',
@@ -85,7 +115,7 @@ async function resolveSurface(b: Binding, month: number | undefined, fine: boole
 // on region geometry into one region layer, so both encode the same path set.
 async function resolveRegion(choro: Binding | undefined, area: Binding | undefined, tier: Tier): Promise<ResolvedLayer | null> {
   if (!choro && !area) return null
-  const features = await loadCountries(baseGeometryUrl(tier))
+  const features = await countriesAt(tier)
   const layer: {
     values?: ResolvedLayer['values']
     scale?: ScaleSpec
@@ -115,7 +145,7 @@ async function resolveRegion(choro: Binding | undefined, area: Binding | undefin
 
 async function resolveBubble(b: Binding, tier: Tier): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
-  const [features, rv] = await Promise.all([loadCountries(baseGeometryUrl(tier)), loadRegionValues(ds)])
+  const [features, rv] = await Promise.all([countriesAt(tier), loadRegionValues(ds)])
   return {
     id: `bubble-${ds.id}`,
     primitive: 'region-symbol',
@@ -249,15 +279,15 @@ interface Task {
 export async function buildLayers(
   bindings: Binding[],
   month?: number,
-  tier: Tier = '110m',
+  tier: Tier = DEFAULT_TIER,
 ): Promise<{ layers: ResolvedLayer[]; failed: Set<string>; legends: LegendEntry[] }> {
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
   const surface = bindings.find((b) => b.channel === 'surface')
 
-  // Heavy line/surface layers use their finer geometry tier once the user has zoomed past the coarse
-  // default (any non-110m base tier); the loaders fall back to coarse if a `-fine` file is absent.
-  const fine = tier !== '110m'
+  // Datasets with a `-fine` snapshot read it once the user has zoomed past the default tier; the
+  // loaders fall back to the coarse snapshot if a `-fine` file is absent.
+  const fine = isFine(tier)
 
   // Draw order (back to front): surface (relief background), base, lanes, region, field, arcs,
   // bubbles, markers. A surface fills the whole map, so it sits behind everything - and base

@@ -15,6 +15,8 @@ const WORLD_50M = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json
 
 const cache = new Map<string, Promise<Topology>>()
 
+// A failed fetch is evicted, so the next load retries instead of replaying the failure for the
+// session (an app can request new geometry URLs mid-session, e.g. finer tiers on zoom).
 function loadTopology(url: string): Promise<Topology> {
   let pending = cache.get(url)
   if (!pending) {
@@ -22,6 +24,7 @@ function loadTopology(url: string): Promise<Topology> {
       if (!r.ok) throw new Error(`geodata: ${r.status} fetching ${url}`)
       return r.json() as Promise<Topology>
     })
+    pending.catch(() => cache.delete(url))
     cache.set(url, pending)
   }
   return pending

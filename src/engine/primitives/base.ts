@@ -8,12 +8,9 @@ export const baseRenderer: PrimitiveRenderer = {
     const path = ctx.projector.path
     if (!path) return
     const s = layer.style
-    const features = ctx.cull
-      ? layer.features.features.filter((f) => !ctx.cull!(f))
-      : layer.features.features
     group
       .selectAll<SVGPathElement, GeoJSON.Feature>('path')
-      .data(features)
+      .data(layer.features.features)
       .join('path')
       .attr('d', (f) => path(f) ?? '')
       .attr('fill', s.fill ?? 'none')
@@ -21,4 +18,5 @@ export const baseRenderer: PrimitiveRenderer = {
       .attr('stroke-width', s.strokeWidth ?? 0.5)
       .attr('opacity', s.opacity ?? 1)
   },
+  cullPadding: (layer) => layer.style.strokeWidth ?? 0.5,
 }

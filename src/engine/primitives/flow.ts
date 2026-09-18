@@ -20,7 +20,6 @@ export const flowRenderer: PrimitiveRenderer = {
 
     const coordinates: Position[][] = []
     for (const f of layer.features.features) {
-      if (ctx.cull?.(f)) continue
       if (f.geometry?.type !== 'LineString') continue
       if (minValue != null) {
         const v = valueOf(layer, f)
@@ -39,4 +38,5 @@ export const flowRenderer: PrimitiveRenderer = {
       .attr('stroke-linecap', 'round')
       .attr('opacity', layer.style.opacity ?? 0.5)
   },
+  cullPadding: (layer) => layer.style.strokeWidth ?? 0.5,
 }

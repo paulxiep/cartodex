@@ -1,8 +1,6 @@
-// Pure view metadata (id → display label), free of d3/DOM, for consumers that must show view names
-// without importing the engine's d3 projection code (the gallery). Kept deliberately separate from
-// the View objects in projections.ts, which inline the same labels: importing this instead of the
-// engine is what lets the gallery entry ship without the d3/engine chunk (WP-3). The two label sets
-// must stay in sync.
+// Pure view metadata (id → display label), free of d3/DOM: the one copy of the view labels. The View
+// objects in projections.ts carry none, and no engine module imports this file, so the app can import
+// it directly (the gallery and the composer) without the bundle pulling in the d3/engine chunks.
 
 import type { ViewId } from '../types'
 

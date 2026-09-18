@@ -12,18 +12,15 @@ import type { Feature, FeatureCollection, Point } from 'geojson'
 import { flowFeature } from '../engine'
 import { DATASETS } from './catalog'
 import type { Dataset } from './catalog'
+import type { Tier } from './tiers'
 
 // Where the browser reads baked snapshots. Dev serves them from the app itself
 // (`public/data/` -> `./data/`); production points VITE_DATA_BASE at the R2/CDN host the
 // scheduled producer writes to, so data refreshes without an app redeploy.
 const DATA_BASE = import.meta.env.VITE_DATA_BASE ?? `${import.meta.env.BASE_URL}data/`
 
-/** Base-geometry resolution tiers (self-hosted same-origin, produced by scripts/build-data.ts).
- *  Coarse `110m` is the world-fit default; finer tiers are fetched lazily as the user zooms in. */
-export type Tier = '110m' | '50m' | '10m'
-
-/** URL of a self-hosted base-geometry tier (countries + land), same-origin from DATA_BASE. Passed to
- *  the engine's geometry loaders, whose own default stays the CDN so the engine remains standalone. */
+/** URL of a self-hosted base-geometry tier (a `countries` topology), same-origin from DATA_BASE. Passed
+ *  to the engine's geometry loaders, whose own default stays the CDN so the engine remains standalone. */
 export function baseGeometryUrl(tier: Tier): string {
   return `${DATA_BASE}world-${tier}.json`
 }
@@ -60,14 +57,20 @@ function fetchJson<T>(url: string): Promise<T> {
   return pending as Promise<T>
 }
 
-// Fetch a baked FeatureCollection, honoring the fine tier when asked; a missing `-fine` file falls
-// back silently to the coarse snapshot (WP-2: a tier can be absent without breaking the layer).
+// `-fine` snapshots that failed to load this session. The layer falls back to its coarse snapshot, so
+// a failed fine tier is reported once and not requested again on every rebuild.
+const failedFine = new Set<string>()
+
+// Fetch a baked FeatureCollection, honoring the fine tier when asked; a `-fine` file that fails to
+// load falls back to the coarse snapshot (a tier can be absent without breaking the layer).
 async function fetchFC(ds: Dataset, month: number | undefined, fine: boolean | undefined): Promise<FeatureCollection> {
-  if (fine && ds.hasFineTier) {
+  const fineUrl = fine && ds.hasFineTier ? urlOf(ds, month, true) : null
+  if (fineUrl && !failedFine.has(fineUrl)) {
     try {
-      return await fetchJson<FeatureCollection>(urlOf(ds, month, true))
-    } catch {
-      /* fall through to the coarse tier */
+      return await fetchJson<FeatureCollection>(fineUrl)
+    } catch (e) {
+      failedFine.add(fineUrl)
+      console.warn(`fine tier unavailable, using the coarse snapshot: ${(e as Error).message}`)
     }
   }
   return fetchJson<FeatureCollection>(urlOf(ds, month, false))

@@ -145,16 +145,22 @@ that is already valid on the sphere (see §5, the surface contour bands).
 The render path stays single d3-svg and re-projects every frame, so performance is bought without a
 second backend:
 
-- **Viewport culling** (`lib/cull.ts`): a per-frame predicate, built in `paint()` and applied by each
-  primitive, skips features outside the drawn viewport (a flat lon/lat window, a globe spherical cap).
-  It is an optimization, never a correctness requirement; every uncertain case draws.
+- **Viewport culling** (`lib/cull.ts`): `paint()` drops each layer's features that lie outside the
+  drawn viewport (a flat lon/lat window; on rotatable views a cap sized to the frame through the
+  view's `radialAngle`), widened by the primitive's `cullPadding` (how far it draws past its
+  geometry). A cartogram layer is not culled, since its scaling moves regions past their bounds. It is
+  an optimization, never a correctness requirement; every uncertain case draws.
 - **Multi-resolution geometry, lazy by zoom**: the base geometry ships as coarse/mid/fine tiers
   (`110m`/`50m`/`10m`) and heavy line layers (rivers) as a coarse default plus a `-fine` tier. The
-  coarse tier draws at world-fit; the engine reports zoom through `MapOptions.onZoom`, and the composer
-  swaps to a finer tier (with hysteresis) by rebuilding through `setLayers`, so detail is fetched only
-  when zoom asks for it. The base tiers are self-hosted, dropping the CDN dependency.
-- **Bundle split**: a `d3` vendor chunk and an `engine` chunk load for the composer, not the gallery;
-  the gallery reads pure view labels (`views/meta.ts`) so its entry ships no d3 or engine code.
+  coarse tier draws at world-fit; the engine reports each zoom step through `MapOptions.onZoom`, and
+  the composer picks a tier (`app/tiers.ts`, with hysteresis; globe and polar views stop at 50m) and
+  rebuilds only the layers that depend on it. `setLayers` swaps layer groups inside the mounted SVG,
+  keeping the projection and the drag/wheel handlers, so a tier landing mid-gesture does not interrupt
+  it. A finer tier that fails to load falls back to the next coarser one. The base tiers are
+  self-hosted, dropping the CDN dependency.
+- **Bundle split**: a `d3` vendor chunk and an `engine` chunk load for the composer, not the gallery.
+  View labels live only in `views/meta.ts`, which no engine module imports; the gallery and the
+  composer import it directly, so the gallery entry ships no d3 or engine code.
 
 ## 4. Engine, app boundary
 
@@ -182,9 +188,11 @@ chrome and reuses the same engine.
 Two very different inputs:
 
 - **Geometry**: self-hosted multi-resolution TopoJSON tiers (`world-{110m,50m,10m}.json`), built from
-  one Natural Earth 1:10m source (public domain) by the producer and served same-origin, keyed by
-  **ISO 3166-1 numeric**. Decoded with `topojson-client`, never committed. The engine's built-in
-  default stays the `world-atlas` CDN so it still runs standalone; the app supplies the tier URLs.
+  one Natural Earth 1:10m source (public domain) by the producer and served same-origin, stitched at
+  the antimeridian and keyed by **ISO 3166-1 numeric** (one id per country). Simplified with spherical
+  weights, so borders along parallels keep their shape. Decoded with `topojson-client`, never
+  committed. The engine's built-in default stays the `world-atlas` CDN so it still runs standalone;
+  the app supplies the tier URLs.
 - **Thematic / layer values**: the part that updates and rarely arrives clean. The friction is the
   **join key** (sources use country names, ISO alpha-2/-3, or custom codes, and disagree on edge
   cases like Kosovo or Taiwan), not the transport. A **producer** (`scripts/build-data.ts`)

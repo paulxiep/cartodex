@@ -29,12 +29,9 @@ export const surfaceRenderer: PrimitiveRenderer = {
     const path = ctx.projector.path
     if (!path) return
     const fill = fillFn(layer)
-    const features = ctx.cull
-      ? layer.features.features.filter((f) => !ctx.cull!(f))
-      : layer.features.features
     group
       .selectAll<SVGPathElement, Feature>('path')
-      .data(features)
+      .data(layer.features.features)
       .join('path')
       .attr('d', (f) => path(f) ?? '')
       .attr('fill', fill)
