@@ -12,30 +12,68 @@ import type { Feature, FeatureCollection, Point } from 'geojson'
 import { flowFeature } from '../engine'
 import { DATASETS } from './catalog'
 import type { Dataset } from './catalog'
+import type { Tier } from './tiers'
 
 // Where the browser reads baked snapshots. Dev serves them from the app itself
 // (`public/data/` -> `./data/`); production points VITE_DATA_BASE at the R2/CDN host the
 // scheduled producer writes to, so data refreshes without an app redeploy.
 const DATA_BASE = import.meta.env.VITE_DATA_BASE ?? `${import.meta.env.BASE_URL}data/`
 
+/** URL of a self-hosted base-geometry tier (a `countries` topology), same-origin from DATA_BASE. Passed
+ *  to the engine's geometry loaders, whose own default stays the CDN so the engine remains standalone. */
+export function baseGeometryUrl(tier: Tier): string {
+  return `${DATA_BASE}world-${tier}.json`
+}
+
 const mm = (m: number): string => String(m).padStart(2, '0')
 
 // Resolve a dataset to its snapshot URL. A `temporal: 'monthly'` dataset (winds/currents/SST) is
 // baked per month as `<base>-MM.json`; the active month (from the composer's global month control)
 // selects which one loads, so only the shown month is fetched. Non-temporal datasets ignore `month`.
-function urlOf(ds: Dataset, month?: number): string {
+function urlOf(ds: Dataset, month?: number, fine?: boolean): string {
   if (ds.source.mode !== 'baked') return ds.source.url
-  const snapshot =
-    ds.temporal === 'monthly' && month != null
-      ? ds.source.snapshot.replace(/\.json$/, `-${mm(month)}.json`)
-      : ds.source.snapshot
+  let snapshot = ds.source.snapshot
+  if (ds.temporal === 'monthly' && month != null) snapshot = snapshot.replace(/\.json$/, `-${mm(month)}.json`)
+  // Lazy geometry: a heavy layer with a finer tier reads `<snapshot>-fine.json` when zoomed in.
+  if (fine && ds.hasFineTier) snapshot = snapshot.replace(/\.json$/, '-fine.json')
   return `${DATA_BASE}${snapshot}`
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const r = await fetch(url)
-  if (!r.ok) throw new Error(`dataset: ${r.status} fetching ${url}`)
-  return (await r.json()) as T
+// Session cache keyed by URL so a tier-change rebuild (which re-runs buildLayers) re-shapes from
+// memory instead of re-downloading every snapshot. Mirrors the engine's geodata cache; snapshots are
+// treated as immutable for the session. Failures are evicted so a later apply can retry.
+const jsonCache = new Map<string, Promise<unknown>>()
+
+function fetchJson<T>(url: string): Promise<T> {
+  let pending = jsonCache.get(url)
+  if (!pending) {
+    pending = fetch(url).then((r) => {
+      if (!r.ok) throw new Error(`dataset: ${r.status} fetching ${url}`)
+      return r.json()
+    })
+    pending.catch(() => jsonCache.delete(url))
+    jsonCache.set(url, pending)
+  }
+  return pending as Promise<T>
+}
+
+// `-fine` snapshots that failed to load this session. The layer falls back to its coarse snapshot, so
+// a failed fine tier is reported once and not requested again on every rebuild.
+const failedFine = new Set<string>()
+
+// Fetch a baked FeatureCollection, honoring the fine tier when asked; a `-fine` file that fails to
+// load falls back to the coarse snapshot (a tier can be absent without breaking the layer).
+async function fetchFC(ds: Dataset, month: number | undefined, fine: boolean | undefined): Promise<FeatureCollection> {
+  const fineUrl = fine && ds.hasFineTier ? urlOf(ds, month, true) : null
+  if (fineUrl && !failedFine.has(fineUrl)) {
+    try {
+      return await fetchJson<FeatureCollection>(fineUrl)
+    } catch (e) {
+      failedFine.add(fineUrl)
+      console.warn(`fine tier unavailable, using the coarse snapshot: ${(e as Error).message}`)
+    }
+  }
+  return fetchJson<FeatureCollection>(urlOf(ds, month, false))
 }
 
 // ── Raw JSON shapes produced by the data pipeline ──────────────────────────────
@@ -185,8 +223,8 @@ function sumFields(fc: FeatureCollection, fields: Iterable<string>): Map<string 
   return values
 }
 
-export async function loadLinesData(ds: Dataset, month?: number): Promise<LinesData> {
-  const fc = await fetchJson<FeatureCollection>(urlOf(ds, month))
+export async function loadLinesData(ds: Dataset, month?: number, fine?: boolean): Promise<LinesData> {
+  const fc = await fetchFC(ds, month, fine)
   const values = sumFields(fc, ds.valueFields ?? ['magnitude'])
   return { features: fc, values, domain: extentOf(values.values()) }
 }
@@ -198,8 +236,8 @@ export async function loadLinesData(ds: Dataset, month?: number): Promise<LinesD
  * double-counts, and the network is drawn once, not stacked. A dataset with no fields (the plain
  * network) contributes nothing, so selecting it alone yields a uniform (unweighted) network.
  */
-export async function loadLinesMerged(datasets: Dataset[]): Promise<LinesData> {
-  const fc = await fetchJson<FeatureCollection>(urlOf(datasets[0]!))
+export async function loadLinesMerged(datasets: Dataset[], fine?: boolean): Promise<LinesData> {
+  const fc = await fetchFC(datasets[0]!, undefined, fine)
   const fields = new Set(datasets.flatMap((d) => d.valueFields ?? []))
   const values = sumFields(fc, fields)
   return { features: fc, values, domain: extentOf(values.values()) }
@@ -217,8 +255,8 @@ export interface SurfaceData {
  * width. Mirrors `loadLinesData`, but reads one value field (default `value`) rather than
  * summing traffic classes. Feature ids are assigned by index so the colour scale can key off them.
  */
-export async function loadSurfaceData(ds: Dataset, month?: number): Promise<SurfaceData> {
-  const fc = await fetchJson<FeatureCollection>(urlOf(ds, month))
+export async function loadSurfaceData(ds: Dataset, month?: number, fine?: boolean): Promise<SurfaceData> {
+  const fc = await fetchFC(ds, month, fine)
   const field = ds.valueFields?.[0] ?? 'value'
   const values = new Map<string | number, number>()
   fc.features.forEach((f, i) => {

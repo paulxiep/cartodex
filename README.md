@@ -26,8 +26,8 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 | **Producer** | `scripts/build-data.ts`: fetch open sources, join to geometry ids, emit id-keyed snapshots to `public/data/`; per-snapshot weight-budget report |
 
 ```
-                world-atlas TopoJSON (jsDelivr)            thematic / layer sources
-                            | geometry                     (World Bank · OpenFlights)
+                Natural Earth base tiers (self-hosted)     thematic / layer sources
+                            | geometry, lazy by zoom       (World Bank · OpenFlights)
                             |                                          | fetch + join (producer)
                             v                                          v
 ┌─ ENGINE (publishable, no datasets/chrome) ─────────┐    ┌─ public/data/*.json (id-keyed snapshots) ─┐
@@ -49,13 +49,13 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 
 - **Engine / projections:** `d3-geo` for azimuthal-equidistant, orthographic, and equal-area (Equal Earth) bases; `d3-drag` and wheel handlers drive pan/zoom and globe rotation by mutating the projection and re-projecting
 - **Channels / scales:** `d3-scale` (sequential / log / quantile / threshold / diverging colour over a robust-by-default domain, sqrt size) + `d3-scale-chromatic`, with a legend rendered from the resolved scale; the `area` channel is a per-feature affine transform over the equal-area base (non-contiguous cartogram), composable with `choropleth`
-- **Data:** `topojson-client`; world-atlas geometry from a CDN; a licensing-aware per-dataset loader (`baked` / `client` / Worker-proxy)
+- **Data:** `topojson-client`; self-hosted multi-resolution base geometry (Natural Earth, fetched by zoom); a licensing-aware per-dataset loader (`baked` / `client` / Worker-proxy)
 - **Language / build / quality:** TypeScript (strict), Vite, **pnpm** (global hard-linked store), ESLint (typescript-eslint)
 - **Delivery:** static `dist/` served from a CDN; data snapshots are refreshed off-build by a scheduled producer and read same-origin, so an app deploy never waits on a source
 
 ## Current state
 
-**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete; M5 adds a scalar-surface encoding with real global elevation & bathymetry; M6 makes the colour scales range-aware and adds a legend.** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, world cities, and hypsometric relief ride the same platform.
+**M0 scaffold, M1 country fundamentals, M2 platform architecture, M3 maritime & environmental, and M4 overlay breadth complete; M5 adds a scalar-surface encoding with real global elevation & bathymetry; M6 makes the colour scales range-aware and adds a legend; M7 adds render and delivery performance (viewport culling, self-hosted multi-resolution geometry tiers fetched by zoom, and a bundle split).** The engine runs on a general **dataset × channel × scale** model: two datasets can share a map, skewed magnitudes read clearly, and the cartogram is a composable area channel. Seaports, the real shipping-lane network, wind/current fields, earthquakes, volcanoes, plate boundaries, rivers, submarine cables, world cities, and hypsometric relief ride the same platform.
 
 **M0 — Scaffold** laid the engine: four views (equirectangular, azimuthal-equidistant, orthographic, and a non-contiguous cartogram), the four layer primitives, the gallery + composer (view picker, layer toggles, compatibility gating, attribution), the licensing-aware data loader, and a producer that emits id-keyed snapshots. First data: World Bank population and OpenFlights airports + routes.
 
@@ -100,6 +100,12 @@ Cartodex is **two orthogonal axes over one typed engine**, rendered as SVG with 
 - **Diverging signed indicators** — population growth, GDP growth, net migration, and the new **FDI net inflows** (% of GDP, World Bank) render on a diverging scale around zero, so sign reads at a glance with a neutral midpoint. It reuses the same per-side ramp model M5 built for sea/land relief, extended from threshold bands to a continuous `linear` scale.
 - **A legend** — each active colour channel draws a compact legend (ramp, value range, units from the dataset label, clamp and centre markers) built from the same resolved scale the renderer fills with, so it cannot drift from the map. Categorical support is deferred until a classified dataset lands.
 
+**M7: Render & delivery performance** buys speed without leaving the single d3-svg backend, an engine-and-build pass with no new datasets:
+
+- **Viewport culling**: a per-frame test skips features outside the drawn viewport (a flat lon/lat window, a globe cap sized to the frame), widened by how far each layer draws past its geometry, so a zoomed-in map projects rivers, lanes, markers and countries only where they show. World-spanning relief and sea-temperature bands still draw whole, and the cartogram, whose scaling moves regions, is never culled. It is an optimization, never a correctness requirement: every uncertain case draws, so nothing goes missing at the dateline or the poles.
+- **Lazy, multi-resolution geometry**: the base map ships as coarse/mid/fine tiers (110m/50m/10m) built from one Natural Earth 1:10m source, stitched at the antimeridian and keyed one ISO id per country, and the heavy river network as a light default plus a finer tier. The coarse tier draws at world-fit; a finer one is fetched only when you zoom in, with hysteresis so it does not thrash at the threshold, and swapped in without interrupting a drag. Globe and polar views stop at the mid tier. The tiers are self-hosted same-origin, so the CDN base dependency is dropped.
+- **Bundle split**: d3 and the engine load for the composer, not the gallery, so the gallery's first paint no longer parses the map engine.
+
 Strict TypeScript and ESLint pass; `vite build` ships a static `dist/`.
 
 Not wired: detailed energy mix and emissions, agricultural production volumes, mineral reserves, bilateral-trade relations, and the contiguous cartogram.
@@ -115,6 +121,7 @@ Not wired: detailed energy mix and emissions, agricultural production volumes, m
 | **M4 — Overlay breadth** | hazards (USGS earthquakes, NOAA volcanoes, plate boundaries); reference geography (Natural Earth cities + rivers); submarine cables (OSM/ODbL); a `society` domain of new World Bank indicators — all on existing channels, zero engine change | Done |
 | **M5 — Scalar surfaces** | a `surface` encoding (scalar contour bands): global elevation & bathymetry from ETOPO1 on a diverging sea/land ramp, and sea-surface temperature from NOAA OISST (both public domain) as a sequential ocean-heat surface; band geometry produced full-sphere and antimeridian-cut in a shared build-time factory; plus a monthly temporal axis (a global month control) walking winds, currents, and SST through the seasonal cycle | Done |
 | **M6 — Scale & legend robustness** | range-aware colour (a robust percentile domain by default, so outliers stop flattening the ramp); a diverging scale for signed indicators (growth, net migration, and the new FDI net inflows) reusing the M5 per-side ramp model; and a legend rendered from the resolved scale for each colour channel. Categorical support deferred until a classified dataset lands | Done |
+| **M7: Render & delivery performance** | viewport culling (flat window + frame-sized globe cap); self-hosted multi-resolution base tiers (110m/50m/10m from one Natural Earth source) plus a coarse/fine river tier, fetched on zoom with hysteresis (coarse by default); a d3/engine bundle split so the gallery ships neither. Single d3-svg, client-side | Done |
 
 Later milestones are refined here as work is defined.
 
@@ -132,6 +139,6 @@ Contributions are welcome. Contributors sign a Contributor License Agreement (Li
 
 - **Maps & projections:** `d3-geo` · `Azimuthal Equidistant (Polar)` · `Orthographic` · `Equirectangular` · `Cartogram (Non-contiguous)` · `Density-Equalizing (D∘P, equal-area base)` · `Great-Circle Densification`
 - **Architecture:** `Two Orthogonal Axes (View x Layers)` · `Layer Primitives x Datasets` · `Routes = Relations (flow)` · `Engine / App Boundary` · `Open View/Layer/Dataset Registries` · `Compatibility Table` · `Publishable Engine`
-- **Data & licensing:** `TopoJSON (world-atlas)` · `World Bank WDI · OpenFlights` · `Licensing-Aware Loader (baked · client-fetch · Worker-proxy)` · `Attribution / Display Rights` · `Id-Keyed Snapshots` · `Geometry-Join Crosswalk (ISO-3166)` · `Off-Build Scheduled Producer`
+- **Data & licensing:** `TopoJSON base tiers (Natural Earth)` · `World Bank WDI · OpenFlights` · `Licensing-Aware Loader (baked · client-fetch · Worker-proxy)` · `Attribution / Display Rights` · `Id-Keyed Snapshots` · `Geometry-Join Crosswalk (ISO-3166)` · `Off-Build Scheduled Producer`
 - **Country data:** `World Bank WDI (CC-BY 4.0)` · `~30 Indicators (Demographics · Economy · Resources · Health)` · `Declarative Indicator Registry` · `Themed Layer Grouping` · `Latest Non-Null Value Select (mrv)`
 - **Toolchain & delivery:** `TypeScript (strict)` · `ESLint (typescript-eslint)` · `Vite` · `pnpm (global hard-linked store)` · `Static App on CDN` · `Off-Build Producer` · `Private Storage, Same-Origin Read`

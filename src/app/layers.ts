@@ -7,6 +7,7 @@
 //     the rest of the map still renders and the composer can flag it.
 // Draw order is fixed by channel: base, region, arcs, bubbles, markers (markers on top).
 
+import type { FeatureCollection } from 'geojson'
 import { loadCountries, getChannel } from '../engine'
 import type { ChannelId, ResolvedLayer, ScaleSpec, ScaleType } from '../engine'
 import { DATASETS, LANE_TAXONOMY, PORT_TAXONOMY } from './catalog'
@@ -14,7 +15,9 @@ import type { Dataset } from './catalog'
 import { markerStyleFor, PLATE_STYLE, SEA_BLUE, CABLE_AMBER, WINDS_COLOR, CURRENTS_COLOR } from './layer-styles'
 import { topmostSelected } from './taxonomy'
 import type { Taxonomy } from './taxonomy'
-import { loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged, loadSurfaceData } from './data-loaders'
+import { baseGeometryUrl, loadRegionValues, loadPointsMerged, loadPairData, loadLinesData, loadLinesMerged, loadSurfaceData } from './data-loaders'
+import { DEFAULT_TIER, coarserTier, isFine } from './tiers'
+import type { Tier } from './tiers'
 
 export interface Binding {
   channel: ChannelId
@@ -33,11 +36,39 @@ export interface LegendEntry {
 // Flight-route density knob: keep only routes flown by at least this many airlines.
 export const FLIGHT_MIN_COUNT = 2
 
-const BASE_ATTRIBUTION = 'Basemap: Natural Earth via world-atlas (public domain)'
+const BASE_ATTRIBUTION = 'Basemap: Natural Earth (public domain)'
 
 /** Stable key for a binding, used to flag an unavailable dataset back to the composer. */
 export function bindingKey(b: Binding): string {
   return b.channel === 'base' ? 'base' : `${b.channel}:${b.dataset}`
+}
+
+// Channels drawn on country geometry, which changes with every base tier.
+const COUNTRY_CHANNELS: ReadonlySet<ChannelId> = new Set<ChannelId>(['base', 'choropleth', 'area', 'bubble'])
+
+/** Whether moving from one base tier to another changes any of these bindings' layers: country
+ *  geometry changes with every tier, a dataset's `-fine` snapshot only when the move crosses the
+ *  default tier. */
+export function tierChangeAffects(bindings: Binding[], from: Tier, to: Tier): boolean {
+  const fineChanged = isFine(from) !== isFine(to)
+  return bindings.some((b) => COUNTRY_CHANNELS.has(b.channel) || (fineChanged && !!DATASETS[b.dataset]?.hasFineTier))
+}
+
+// Countries for a tier. A finer tier that fails to load falls back to the next coarser one, so a
+// missing or unreachable file costs detail rather than the base, choropleth and bubble layers.
+const reportedTiers = new Set<Tier>()
+async function countriesAt(tier: Tier): Promise<FeatureCollection> {
+  try {
+    return await loadCountries(baseGeometryUrl(tier))
+  } catch (e) {
+    const coarser = coarserTier(tier)
+    if (!coarser) throw e
+    if (!reportedTiers.has(tier)) {
+      reportedTiers.add(tier)
+      console.warn(`base tier ${tier} unavailable, using ${coarser}: ${(e as Error).message}`)
+    }
+    return countriesAt(coarser)
+  }
 }
 
 function scaleSpecFor(ds: Dataset, channel: ChannelId, override?: ScaleType): ScaleSpec {
@@ -50,8 +81,8 @@ function scaleSpecFor(ds: Dataset, channel: ChannelId, override?: ScaleType): Sc
 // `bordersOnly` drops the land fill so a background surface (relief/bathymetry) shows through
 // with country outlines drawn on top of it; the darker stroke reads over bright hypsometric
 // colour. Normal maps keep the opaque land fill over the sphere.
-async function resolveBase(bordersOnly = false): Promise<ResolvedLayer> {
-  const features = await loadCountries()
+async function resolveBase(tier: Tier, bordersOnly = false): Promise<ResolvedLayer> {
+  const features = await countriesAt(tier)
   return {
     id: 'base',
     primitive: 'base',
@@ -66,9 +97,9 @@ async function resolveBase(bordersOnly = false): Promise<ResolvedLayer> {
 // Surface: a baked scalar field (elevation/bathymetry relief, heatmap) drawn as value-filled
 // contour bands. Single-occupancy background - drawn backmost so overlays (quakes, currents)
 // read above it. Colour comes from the dataset's scale (threshold + diverging sea/land ramp).
-async function resolveSurface(b: Binding, month?: number): Promise<ResolvedLayer> {
+async function resolveSurface(b: Binding, month: number | undefined, fine: boolean): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
-  const d = await loadSurfaceData(ds, month)
+  const d = await loadSurfaceData(ds, month, fine)
   return {
     id: `surface-${ds.id}`,
     primitive: 'surface',
@@ -82,9 +113,9 @@ async function resolveSurface(b: Binding, month?: number): Promise<ResolvedLayer
 
 // Merge the (single) choropleth binding (colour) and the (single) area binding (cartogram)
 // on region geometry into one region layer, so both encode the same path set.
-async function resolveRegion(choro?: Binding, area?: Binding): Promise<ResolvedLayer | null> {
+async function resolveRegion(choro: Binding | undefined, area: Binding | undefined, tier: Tier): Promise<ResolvedLayer | null> {
   if (!choro && !area) return null
-  const features = await loadCountries()
+  const features = await countriesAt(tier)
   const layer: {
     values?: ResolvedLayer['values']
     scale?: ScaleSpec
@@ -112,9 +143,9 @@ async function resolveRegion(choro?: Binding, area?: Binding): Promise<ResolvedL
   }
 }
 
-async function resolveBubble(b: Binding): Promise<ResolvedLayer> {
+async function resolveBubble(b: Binding, tier: Tier): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
-  const [features, rv] = await Promise.all([loadCountries(), loadRegionValues(ds)])
+  const [features, rv] = await Promise.all([countriesAt(tier), loadRegionValues(ds)])
   return {
     id: `bubble-${ds.id}`,
     primitive: 'region-symbol',
@@ -178,10 +209,10 @@ function topmostDatasets(bindings: Binding[], tax: Taxonomy): Dataset[] {
 // geometry (summed over the union of the top-most selected leaf fields, drawn once); different
 // snapshots (shipping vs cables vs rivers) are distinct networks resolved separately. Grouped by
 // snapshot upstream in buildLayers, so each network is drawn from its own file and keeps its tone.
-async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> {
+async function resolveLanes(bindings: Binding[], fine: boolean): Promise<ResolvedLayer | null> {
   const datasets = topmostDatasets(bindings, LANE_TAXONOMY)
   if (!datasets.length) return null
-  const d = await loadLinesMerged(datasets)
+  const d = await loadLinesMerged(datasets, fine)
   const first = datasets[0]!
   // Plate boundaries are a hazard context network, not a sea lane: a bright core over a dark casing
   // (layer-styles.ts) so they read over dark sea, bright bathymetry, and warm SST alike.
@@ -221,9 +252,9 @@ async function resolveLanes(bindings: Binding[]): Promise<ResolvedLayer | null> 
 
 // Field: baked streamlines (winds, currents), width by per-feature magnitude, coloured by the
 // dataset's identity ramp so multiple fields stay distinguishable.
-async function resolveField(b: Binding, month?: number): Promise<ResolvedLayer> {
+async function resolveField(b: Binding, month: number | undefined, fine: boolean): Promise<ResolvedLayer> {
   const ds = DATASETS[b.dataset]!
-  const d = await loadLinesData(ds, month)
+  const d = await loadLinesData(ds, month, fine)
   const color = ds.id === 'currents' ? CURRENTS_COLOR : WINDS_COLOR
   return {
     id: `field-${ds.id}`,
@@ -248,21 +279,26 @@ interface Task {
 export async function buildLayers(
   bindings: Binding[],
   month?: number,
+  tier: Tier = DEFAULT_TIER,
 ): Promise<{ layers: ResolvedLayer[]; failed: Set<string>; legends: LegendEntry[] }> {
   const choro = bindings.find((b) => b.channel === 'choropleth')
   const area = bindings.find((b) => b.channel === 'area')
   const surface = bindings.find((b) => b.channel === 'surface')
 
+  // Datasets with a `-fine` snapshot read it once the user has zoomed past the default tier; the
+  // loaders fall back to the coarse snapshot if a `-fine` file is absent.
+  const fine = isFine(tier)
+
   // Draw order (back to front): surface (relief background), base, lanes, region, field, arcs,
   // bubbles, markers. A surface fills the whole map, so it sits behind everything - and base
   // becomes borders-only over it, so country outlines read on top of the relief.
   const tasks: Task[] = []
-  if (surface) tasks.push({ keys: [bindingKey(surface)], run: () => resolveSurface(surface, month) })
+  if (surface) tasks.push({ keys: [bindingKey(surface)], run: () => resolveSurface(surface, month, fine) })
   if (bindings.some((b) => b.channel === 'base')) {
     // A land-covering relief (elevation) shows through, so the base drops its land fill; an
     // ocean-only surface (SST) leaves land alone. Non-surface maps keep the opaque land fill.
     const bordersOnly = surface != null && !!DATASETS[surface.dataset]?.coversLand
-    tasks.push({ keys: ['base'], run: () => resolveBase(bordersOnly) })
+    tasks.push({ keys: ['base'], run: () => resolveBase(tier, bordersOnly) })
   }
   // Lane bindings that share a snapshot (shipping by ship type) merge into one layer; different
   // snapshots (shipping vs cables vs rivers) stay separate networks, each drawn from its own file.
@@ -273,14 +309,14 @@ export async function buildLayers(
     const key = snapshotKey(ds)
     ;(laneGroups.get(key) ?? laneGroups.set(key, []).get(key)!).push(b)
   }
-  for (const group of laneGroups.values()) tasks.push({ keys: group.map(bindingKey), run: () => resolveLanes(group) })
+  for (const group of laneGroups.values()) tasks.push({ keys: group.map(bindingKey), run: () => resolveLanes(group, fine) })
   if (choro || area) {
     const keys = [choro, area].filter((b): b is Binding => b != null).map(bindingKey)
-    tasks.push({ keys, run: () => resolveRegion(choro, area) })
+    tasks.push({ keys, run: () => resolveRegion(choro, area, tier) })
   }
-  for (const b of bindings.filter((b) => b.channel === 'field')) tasks.push({ keys: [bindingKey(b)], run: () => resolveField(b, month) })
+  for (const b of bindings.filter((b) => b.channel === 'field')) tasks.push({ keys: [bindingKey(b)], run: () => resolveField(b, month, fine) })
   for (const b of bindings.filter((b) => b.channel === 'arc')) tasks.push({ keys: [bindingKey(b)], run: () => resolveArc(b) })
-  for (const b of bindings.filter((b) => b.channel === 'bubble')) tasks.push({ keys: [bindingKey(b)], run: () => resolveBubble(b) })
+  for (const b of bindings.filter((b) => b.channel === 'bubble')) tasks.push({ keys: [bindingKey(b)], run: () => resolveBubble(b, tier) })
   // Marker bindings that share a snapshot (seaports by type) merge into one layer; different
   // snapshots (airports vs seaports) stay separate.
   const markerGroups = new Map<string, Binding[]>()

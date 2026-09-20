@@ -28,6 +28,7 @@ import { buildEarthquakes } from './sources/hazards/earthquakes'
 import { buildVolcanoes } from './sources/hazards/volcanoes'
 import { buildPlates } from './sources/hazards/plates'
 import { buildCities, buildRivers } from './sources/reference/naturalearth'
+import { buildBasemap } from './sources/reference/basemap'
 import { buildCables } from './sources/maritime/cables'
 
 // Incremental by default: skip a dataset whose snapshot already exists. Pass --force
@@ -229,31 +230,69 @@ async function buildReference(): Promise<void> {
     }
   } else console.log('  cities: present, skipping (pnpm refresh-data to refresh)')
 
-  if (FORCE || !present('rivers.json')) {
+  if (FORCE || !present('rivers.json', 'rivers-fine.json')) {
     try {
-      const rivers = await buildRivers()
-      if (rivers.features.length >= 100) write('rivers.json', rivers)
-      else console.warn(`  rivers: only ${rivers.features.length}, kept existing`)
+      const { coarse, fine } = await buildRivers()
+      if (coarse.features.length >= 100) write('rivers.json', coarse)
+      else console.warn(`  rivers: only ${coarse.features.length}, kept existing`)
+      if (fine.features.length >= 100) write('rivers-fine.json', fine)
+      else console.warn(`  rivers-fine: only ${fine.features.length}, kept existing`)
     } catch (e) {
       console.warn(`  rivers skipped, kept existing: ${(e as Error).message}`)
     }
   } else console.log('  rivers: present, skipping (pnpm refresh-data to refresh)')
 }
 
+// Base geometry: self-hosted multi-resolution country tiers (world-{110m,50m,10m}.json), derived
+// from ONE Natural Earth 1:10m source (public domain). Static - seeded once - so skip when all
+// three exist unless --force. Replaces the world-atlas CDN base dependency; 110m loads at world-fit
+// and the finer tiers are fetched as the user zooms in.
+async function buildBase(): Promise<void> {
+  if (!FORCE && present('world-110m.json', 'world-50m.json', 'world-10m.json')) {
+    console.log('  basemap: all tiers present, skipping (pnpm refresh-data to refresh)')
+    return
+  }
+  try {
+    const tiers = await buildBasemap()
+    for (const t of tiers) {
+      if (t.countries >= 200) write(t.file, t.topo)
+      else console.warn(`  ${t.file}: only ${t.countries} countries, kept existing`)
+    }
+  } catch (e) {
+    console.warn(`  basemap skipped, kept existing: ${(e as Error).message}`)
+  }
+}
+
 // Per-snapshot weight-budget report. Today's snapshots are small (WDI ~2-5K, airports/
 // flights <1M) and lazy-loaded, so this is a guardrail, not a gate - its real job is to keep
 // M3's dense field (wind/current streamline) and route snapshots honest. Warns past budget.
 const BUDGET_BYTES = 900 * 1024
+// Lazy tiers - the finer base tiers and heavy topic `-fine` tiers - are fetched only on zoom, not on
+// the default view, so they get their own larger allowance. world-110m.json loads on every first paint,
+// so it stays under the per-snapshot budget.
+const LAZY_BUDGET_BYTES = 4 * 1024 * 1024
 
 function reportWeights(): void {
   if (!existsSync(OUT)) return
-  const files = readdirSync(OUT)
+  const kb = (b: number): string => `${(b / 1024).toFixed(1)}K`
+  const all = readdirSync(OUT)
     .filter((f) => f.endsWith('.json'))
     .map((f) => ({ name: f, bytes: statSync(resolve(OUT, f)).size }))
     .sort((a, b) => b.bytes - a.bytes)
-  if (files.length === 0) return
+  if (all.length === 0) return
+  const isLazy = (n: string): boolean => n === 'world-50m.json' || n === 'world-10m.json' || /-fine\.json$/.test(n)
+  const lazy = all.filter((f) => isLazy(f.name))
+  const files = all.filter((f) => !isLazy(f.name))
+
+  if (lazy.length > 0) {
+    console.log(`\nLazy tiers - finer base + topic fine (≤ ${kb(LAZY_BUDGET_BYTES)}, fetched on zoom):`)
+    for (const f of lazy) {
+      const flag = f.bytes > LAZY_BUDGET_BYTES ? '  ⚠ over budget' : ''
+      console.log(`  ${f.name.padEnd(28)} ${kb(f.bytes).padStart(8)}${flag}`)
+    }
+  }
+
   const total = files.reduce((s, f) => s + f.bytes, 0)
-  const kb = (b: number): string => `${(b / 1024).toFixed(1)}K`
   console.log(`\nWeight budget (per snapshot ≤ ${kb(BUDGET_BYTES)}):`)
   for (const f of files.slice(0, 5)) {
     const flag = f.bytes > BUDGET_BYTES ? '  ⚠ over budget' : ''
@@ -267,6 +306,7 @@ function reportWeights(): void {
 async function main(): Promise<void> {
   mkdirSync(OUT, { recursive: true })
   console.log(`Building datasets → ${OUT}${FORCE ? ' (--force)' : ''}`)
+  await buildBase()
   await buildWdi()
   await buildFlights()
   await buildMaritime()

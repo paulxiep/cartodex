@@ -18,13 +18,17 @@ interface DrawnLine {
   w: number
 }
 
+const WIDTH_RANGE: [number, number] = [0.3, 2.2]
+// Arrowhead marker size, in units of the line's stroke width (markerUnits=strokeWidth).
+const ARROW_SIZE = 5
+
 export const fieldRenderer: PrimitiveRenderer = {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext) {
     const path = ctx.projector.path
     if (!path) return
     const color = layer.style.stroke ?? layer.style.arcColor ?? 'rgba(120,200,255,0.6)'
     const domain = layer.valueDomain ?? [0, 1]
-    const width = radiusScale(domain, layer.style.widthRange ?? [0.3, 2.2])
+    const width = radiusScale(domain, layer.style.widthRange ?? WIDTH_RANGE)
 
     const lines: DrawnLine[] = []
     for (const f of layer.features.features) {
@@ -47,7 +51,7 @@ export const fieldRenderer: PrimitiveRenderer = {
         .attr('id', id)
         .attr('viewBox', '0 0 10 10')
         .attr('refX', 8).attr('refY', 5)
-        .attr('markerWidth', 5).attr('markerHeight', 5)
+        .attr('markerWidth', ARROW_SIZE).attr('markerHeight', ARROW_SIZE)
         .attr('markerUnits', 'strokeWidth')
         .attr('orient', 'auto-start-reverse')
         .append('path')
@@ -88,5 +92,10 @@ export const fieldRenderer: PrimitiveRenderer = {
       .attr('stroke-linejoin', 'round')
       .attr('opacity', layer.style.opacity ?? 0.75)
     if (markerRef) sel.attr('marker-end', markerRef)
+  },
+  // The widest core plus its casing; an arrowhead reaches ARROW_SIZE stroke widths past the line end.
+  cullPadding: (layer) => {
+    const widest = (layer.style.widthRange ?? WIDTH_RANGE)[1] + (layer.style.casing?.width ?? 0)
+    return layer.style.arrowhead ? widest * ARROW_SIZE : widest
   },
 }

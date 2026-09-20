@@ -38,4 +38,5 @@ export const flowRenderer: PrimitiveRenderer = {
       .attr('stroke-linecap', 'round')
       .attr('opacity', layer.style.opacity ?? 0.5)
   },
+  cullPadding: (layer) => layer.style.strokeWidth ?? 0.5,
 }

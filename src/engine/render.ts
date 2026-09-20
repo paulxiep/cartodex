@@ -16,8 +16,14 @@ import type {
   SvgGroup,
   ViewId,
 } from './types'
+import { getView } from './views'
+import { getPrimitive } from './primitives'
+import { visibleLayer } from './lib/cull'
+import { SPHERE } from './views/_svgProjector'
 
 type SvgSelection = Selection<SVGSVGElement, unknown, null, undefined>
+
+const sphere = SPHERE as unknown as GeoGeometryObjects
 
 // Per-wheel-event zoom factor. Exponential in deltaY so zoom is proportional to scroll intensity and
 // symmetric (in/out are inverses); a mouse notch (deltaY ~100) gives ~1.25x (was a flat 1.1), while a
@@ -31,9 +37,10 @@ function wheelZoomFactor(deltaY: number): number {
 /**
  * Globe-like interaction for a d3 projection: drag rotates the projection center
  * (re-centering the polar map / spinning the orthographic globe), wheel zooms by
- * scaling the projection. Repaint is throttled to one animation frame.
+ * scaling the projection. `onZoom` runs on each wheel step; repaint is throttled to
+ * one animation frame.
  */
-function attachRotate(svg: SvgSelection, projection: GeoProjection, onChange: () => void): void {
+function attachRotate(svg: SvgSelection, projection: GeoProjection, onChange: () => void, onZoom: () => void): void {
   let raf = 0
   const schedule = (): void => {
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; onChange() })
@@ -52,6 +59,7 @@ function attachRotate(svg: SvgSelection, projection: GeoProjection, onChange: ()
     (event) => {
       event.preventDefault()
       projection.scale(Math.max(40, projection.scale() * wheelZoomFactor(event.deltaY)))
+      onZoom()
       schedule()
     },
     { passive: false },
@@ -76,11 +84,6 @@ function clampFlatPan(projection: GeoProjection, path: GeoPath, width: number, h
   const ay = wH >= height ? (y0 > 0 ? -y0 : y1 < height ? height - y1 : 0) : (height - (y0 + y1)) / 2
   if (ax !== 0 || ay !== 0) projection.translate([tx + ax, ty + ay])
 }
-import { getView } from './views'
-import { getPrimitive } from './primitives'
-import { SPHERE } from './views/_svgProjector'
-
-const sphere = SPHERE as unknown as GeoGeometryObjects
 
 function sizeOf(container: HTMLElement): [number, number] {
   const w = container.clientWidth || 900
@@ -92,21 +95,33 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
   let viewId: ViewId = options.view
   let layers: ResolvedLayer[] = options.layers
 
-  // Interaction state persists across re-renders (a layer toggle or resize rebuilds the
-  // SVG, but must not reset the user's orientation). Cleared only on an explicit setView.
-  // Zoom is stored as a RATIO to the view's fitSize baseline (not an absolute px scale),
-  // so a resize still refits the view while keeping the user's zoom level. Rotatable views keep
-  // a rotation + scale ratio; flat views keep a scale ratio + a pan offset (px from fit-centre).
+  // Interaction state persists across re-renders (a resize rebuilds the SVG, but must not reset the
+  // user's orientation). Cleared only on an explicit setView. Zoom is stored as a RATIO to the view's
+  // fitSize baseline (not an absolute px scale), so a resize still refits the view while keeping the
+  // user's zoom level. Rotatable views keep a rotation + scale ratio; flat views keep a scale ratio +
+  // a pan offset (px from fit-centre).
   let savedRotate: [number, number, number] | null = null
   let savedScaleK: number | null = null
   let savedFlatK = 1
   let savedPan: [number, number] = [0, 0]
 
+  // Each mounted SVG belongs to a generation. Teardown starts a new one, so handlers and animation
+  // frames left over from a replaced SVG (a drag still in progress, a queued repaint) stop touching the
+  // saved state.
+  let generation = 0
+  // Swaps the mounted SVG's layer groups for the current `layers` and repaints, keeping the projection,
+  // the drag/wheel handlers and the user's zoom, so a layer change never interrupts a gesture.
+  let refreshLayers: (() => void) | null = null
+
   function teardown(): void {
+    generation++
+    refreshLayers = null
     container.replaceChildren()
   }
 
   function renderSvg(width: number, height: number): void {
+    const mounted = generation
+    const live = (): boolean => mounted === generation
     const view = getView(viewId)
     const projector = view.build(width, height)
     // Restore a globe/polar orientation carried over from a previous render (before the
@@ -150,27 +165,36 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
       ? root.append('path').attr('class', 'cartodex-graticule').attr('fill', 'none').attr('stroke', 'rgba(130,150,180,0.16)').attr('stroke-width', 0.5)
       : null
 
-    const layerGroups: Array<{ group: SvgGroup; layer: ResolvedLayer }> = []
-    for (const layer of layers) {
-      const group = root.append('g').attr('class', `layer-${layer.primitive} layer-${layer.id}`)
-      layerGroups.push({ group, layer })
-    }
-
-    // Marker at the projection center (drawn on top), for azimuthal / polar readability.
+    // Marker at the projection center (drawn on top), for azimuthal / polar readability. Layer
+    // groups are inserted before it, so it stays on top when they are rebuilt.
     const centerGroup =
       view.showCenter && projector.projection ? root.append('g').attr('class', 'cartodex-center') : null
 
+    let layerGroups: Array<{ group: SvgGroup; layer: ResolvedLayer }> = []
+    function buildLayerGroups(): void {
+      for (const { group } of layerGroups) group.remove()
+      layerGroups = layers.map((layer) => ({
+        group: root.insert('g', '.cartodex-center').attr('class', `layer-${layer.primitive} layer-${layer.id}`),
+        layer,
+      }))
+    }
+    buildLayerGroups()
+
     // Re-run all layer draws (and the sphere/graticule) against the current projector.
-    // Used both for the initial paint and on every rotate/zoom tick of a globe-like view.
+    // Used for the initial paint, on every rotate/zoom tick, and after a layer refresh.
     function paint(): void {
       const path = projector.path
       if (path) {
         spherePath?.attr('d', path(sphere) ?? '')
         gratPath?.attr('d', path(geoGraticule10()) ?? '')
       }
+      // Each layer drops the features outside the viewport, widened by how far its primitive draws
+      // past the geometry (see lib/cull).
       for (const { group, layer } of layerGroups) {
         group.selectAll('*').remove()
-        getPrimitive(layer.primitive).drawSVG(group, layer, ctx)
+        const renderer = getPrimitive(layer.primitive)
+        const padding = renderer.cullPadding ? renderer.cullPadding(layer) : 0
+        renderer.drawSVG(group, visibleLayer(layer, ctx, padding), ctx)
       }
       if (centerGroup && projector.projection) {
         centerGroup.selectAll('*').remove()
@@ -190,14 +214,29 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
     }
 
     paint()
+    refreshLayers = () => {
+      buildLayerGroups()
+      paint()
+    }
 
     if (view.rotatable && projector.projection) {
       const proj = projector.projection
-      attachRotate(svg, proj, () => {
-        savedRotate = proj.rotate()
-        savedScaleK = baseRotatableScale ? proj.scale() / baseRotatableScale : null
-        paint()
-      })
+      const scaleRatio = (): number | null => (baseRotatableScale ? proj.scale() / baseRotatableScale : null)
+      attachRotate(
+        svg,
+        proj,
+        () => {
+          if (!live()) return
+          savedRotate = proj.rotate()
+          savedScaleK = scaleRatio()
+          paint()
+        },
+        () => {
+          if (!live()) return
+          savedScaleK = scaleRatio()
+          options.onZoom?.({ k: savedScaleK ?? 1, view: viewId })
+        },
+      )
     } else if (flatProjection && projector.path && baseFlatScale != null && baseFlatTranslate != null) {
       // Flat views: pan + zoom by re-projecting (mutate scale/translate + repaint), the same model
       // the globe uses - so geometry stays crisp and strokes keep their width at every zoom, rather
@@ -208,13 +247,16 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
       const baseScale = baseFlatScale
       const baseTranslate = baseFlatTranslate
       let raf = 0
-      const schedule = (): void => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paint() }) }
+      const schedule = (): void => {
+        if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (live()) paint() })
+      }
       const persist = (): void => {
         savedFlatK = proj.scale() / baseScale
         const [tx, ty] = proj.translate()
         savedPan = [tx - baseTranslate[0], ty - baseTranslate[1]]
       }
       const dragBehavior = drag<SVGSVGElement, unknown>().on('drag', (event) => {
+        if (!live()) return
         const [tx, ty] = proj.translate()
         proj.translate([tx + event.dx, ty + event.dy])
         clampFlatPan(proj, flatPath, width, height)
@@ -226,6 +268,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
         'wheel',
         (event) => {
           event.preventDefault()
+          if (!live()) return
           const k0 = proj.scale() / baseScale
           const k = Math.max(1, Math.min(12, k0 * wheelZoomFactor(event.deltaY)))
           const ratio = k / k0
@@ -236,6 +279,7 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
           proj.translate([cx + (tx - cx) * ratio, cy + (ty - cy) * ratio])
           clampFlatPan(proj, flatPath, width, height)
           persist()
+          options.onZoom?.({ k: savedFlatK, view: viewId })
           schedule()
         },
         { passive: false },
@@ -270,7 +314,8 @@ export function createMap(container: HTMLElement, options: MapOptions): MapHandl
     },
     setLayers(next: ResolvedLayer[]) {
       layers = next
-      render()
+      if (refreshLayers) refreshLayers()
+      else render()
     },
     destroy() {
       ro.disconnect()

@@ -21,6 +21,18 @@ export default defineConfig({
         compose: 'compose.html',
         changelog: 'changelog.html',
       },
+      output: {
+        // Split the heavy, cacheable code the composer needs into vendor chunks so the gallery
+        // (index.html) entry ships neither: `d3` (d3-* + topojson-client) and `engine` (src/engine/*).
+        manualChunks(id: string) {
+          const p = id.replace(/\\/g, '/')
+          // views/meta.ts holds the pure view labels the gallery and composer import. No engine module
+          // imports it, so leaving it unassigned folds it into the app chunks rather than `engine`.
+          if (p.includes('/src/engine/views/meta')) return
+          if (p.includes('/src/engine/')) return 'engine'
+          if (/\/node_modules\/(d3-|topojson-client)/.test(p)) return 'd3'
+        },
+      },
     },
   },
 })

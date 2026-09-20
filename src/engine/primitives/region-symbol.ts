@@ -3,15 +3,16 @@
 // data - it reads magnitudes (population, GDP) as bubbles instead of a near-monochrome
 // choropleth, and coexists with a choropleth on the same map (bivariate).
 //
-// Centroid via d3 geoCentroid (spherical) then projected, so it tracks every view; bubbles
-// on the hidden hemisphere of a globe are dropped via the shared far-side test. Larger
-// bubbles draw first so smaller ones stay clickable on top.
+// Centroid via d3 geoCentroid (spherical) then projected, so it tracks every view; off-viewport
+// regions are dropped by the viewport cull (padded by the largest bubble), and far-side bubbles by an
+// exact horizon test on the centroid (lib/cull farSideTest). Larger bubbles draw first so smaller ones
+// stay clickable on top.
 
 import { geoCentroid } from 'd3-geo'
 import type { Feature } from 'geojson'
 import type { PrimitiveRenderer, ResolvedLayer, RenderContext, SvgGroup } from '../types'
 import { radiusScale } from '../lib/scales'
-import { farSideTest } from '../lib/clip'
+import { farSideTest } from '../lib/cull'
 import { showTooltip, hideTooltip } from '../lib/tooltip'
 
 interface PlacedBubble {
@@ -22,6 +23,8 @@ interface PlacedBubble {
   value: number
 }
 
+const RADIUS_RANGE: [number, number] = [2, 26]
+
 function label(f: Feature, value: number): string {
   const name = (f.properties?.['name'] as string | undefined) ?? String(f.id ?? '')
   return `${name}: ${value.toLocaleString()}`
@@ -30,7 +33,9 @@ function label(f: Feature, value: number): string {
 export const regionSymbolRenderer: PrimitiveRenderer = {
   drawSVG(group: SvgGroup, layer: ResolvedLayer, ctx: RenderContext) {
     const domain = layer.valueDomain ?? [0, 1]
-    const r = radiusScale(domain, layer.style.radiusRange ?? [2, 26])
+    const r = radiusScale(domain, layer.style.radiusRange ?? RADIUS_RANGE)
+    // The bubble is drawn at the region CENTROID, so the far side of a globe is decided by an exact
+    // horizon test on that centroid, not the region bbox.
     const isFarSide = farSideTest(ctx)
     const placed: PlacedBubble[] = []
     for (const f of layer.features.features) {
@@ -61,4 +66,5 @@ export const regionSymbolRenderer: PrimitiveRenderer = {
       .on('pointermove', (e: PointerEvent, d) => showTooltip(label(d.feature, d.value), e.clientX, e.clientY))
       .on('pointerleave', hideTooltip)
   },
+  cullPadding: (layer) => (layer.style.radiusRange ?? RADIUS_RANGE)[1] + (layer.style.strokeWidth ?? 0.5),
 }

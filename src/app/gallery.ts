@@ -1,7 +1,7 @@
 // The gallery / "codex": a grid of preset (view × layers) cards, each deep-linking
 // into the composer. Adding a showcase is a new entry in presets.ts.
 
-import { getView } from '../engine'
+import { VIEW_META } from '../engine/views/meta'
 import { DATASETS } from './catalog'
 import { PRESETS, presetHash } from './presets'
 import type { Preset } from './presets'
@@ -9,7 +9,7 @@ import { VERSION } from './version'
 
 function cell(p: Preset): string {
   const href = `${import.meta.env.BASE_URL}compose.html${presetHash(p)}`
-  const view = getView(p.view).label
+  const view = VIEW_META[p.view]
   const layers = p.bindings
     .map((b) => (b.channel === 'base' ? 'Base' : DATASETS[b.dataset]?.label ?? b.dataset))
     .join(' · ')

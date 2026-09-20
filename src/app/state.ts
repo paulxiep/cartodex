@@ -1,11 +1,10 @@
-// Composer state <-> URL hash. State is the active view plus a set of channel bindings; the
-// hash encodes it as `#view=<id>&<channel>=<dataset>[:<scale>][,<dataset2>…]` so any map is
-// shareable/deep-linkable. Single-occupancy channels take one dataset (extra items ignored);
-// multi-occupancy take a comma list; `base` is structural (`base=land`). Parsing validates
-// view, channel, dataset existence, and dataset-kind↔channel match, dropping anything stale.
-
-import { VIEW_LIST, CHANNEL_LIST } from '../engine'
-import type { ChannelId, ScaleType, ViewId } from '../engine'
+// Composer state and its URL-hash encoding. State is the active view plus a set of channel bindings;
+// `toHash` encodes it as `#view=<id>&<channel>=<dataset>[:<scale>][,<dataset2>…]` so any map is
+// shareable/deep-linkable. This module is deliberately engine/d3-free (it imports only the dataset
+// catalog), so the gallery - which reaches it via presets → presetHash → toHash - stays engine-free.
+// The inverse, parseHash (validated against the engine's view/channel registries), lives in the
+// composer, its only caller, to keep those engine imports out of this pure module.
+import type { ChannelId, ViewId } from '../engine'
 import { DATASETS } from './catalog'
 import type { Binding } from './layers'
 
@@ -39,30 +38,3 @@ export function toHash(state: State): string {
   return `#${parts.join('&')}`
 }
 
-export function parseHash(hash: string, fallback: State): State {
-  const params = new URLSearchParams(hash.replace(/^#/, ''))
-  const viewRaw = params.get('view')
-  const view = VIEW_LIST.some((v) => v.id === viewRaw) ? (viewRaw as ViewId) : fallback.view
-
-  const monthRaw = Number(params.get('month'))
-  const month = Number.isInteger(monthRaw) && monthRaw >= 1 && monthRaw <= 12 ? monthRaw : fallback.month
-
-  const bindings: Binding[] = []
-  for (const channel of CHANNEL_LIST) {
-    const raw = params.get(channel.id)
-    if (raw == null) continue
-    if (channel.id === 'base') {
-      bindings.push({ channel: 'base', dataset: 'land' })
-      continue
-    }
-    const items = raw.split(',').filter(Boolean)
-    const chosen = channel.capacity === 'single' ? items.slice(0, 1) : items
-    for (const item of chosen) {
-      const [dataset, scale] = item.split(':')
-      const ds = dataset ? DATASETS[dataset] : undefined
-      if (!ds || ds.kind !== channel.datasetKind) continue
-      bindings.push({ channel: channel.id, dataset: ds.id, ...(scale ? { scale: scale as ScaleType } : {}) })
-    }
-  }
-  return bindings.length ? { view, bindings, month } : fallback
-}

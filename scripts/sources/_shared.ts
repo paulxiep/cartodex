@@ -18,11 +18,11 @@ const HEADERS = {
   Accept: 'application/json, text/csv, */*',
 }
 
-export async function getText(url: string, attempts = 3): Promise<string> {
+export async function getText(url: string, attempts = 3, timeoutMs = 30000): Promise<string> {
   let lastErr: unknown
   for (let i = 0; i < attempts; i++) {
     try {
-      const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(30000) })
+      const r = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(timeoutMs) })
       if (!r.ok) {
         // Include a snippet of the body: for a real client error the API says why (bad
         // indicator/parameter); a spurious edge/throttle 400 carries a generic message.
@@ -41,8 +41,8 @@ export async function getText(url: string, attempts = 3): Promise<string> {
   throw new Error(`${(lastErr as Error).message} for ${url} (after ${attempts} attempts)`)
 }
 
-export async function getJson<T>(url: string): Promise<T> {
-  return JSON.parse(await getText(url)) as T
+export async function getJson<T>(url: string, timeoutMs?: number): Promise<T> {
+  return JSON.parse(await getText(url, 3, timeoutMs)) as T
 }
 
 /** Quote-aware CSV line parser (OpenFlights quotes text fields, uses \N for null). */

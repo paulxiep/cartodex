@@ -1,6 +1,8 @@
 // Cartodex engine - public API. This barrel is the package boundary: the app (and any
 // future external consumer) imports only from here. The engine holds no datasets and
-// no page chrome, so it can be published and reused as-is.
+// no page chrome, so it can be published and reused as-is. One exception: views/meta.ts
+// (pure view labels) is imported directly, so the gallery can name views without loading
+// the engine and d3; this barrel does not re-export it for the same reason.
 
 export { createMap } from './render'
 export { VIEWS, VIEW_LIST, getView } from './views'

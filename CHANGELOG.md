@@ -3,7 +3,23 @@
 Changes to the maps you see and interact with, newest first. This project follows
 [Semantic Versioning](https://semver.org).
 
-## [0.1.3] - 2026-07-28
+## [0.1.3] - 2026-09-16
+
+A performance pass. The maps open faster and stay responsive as you zoom, showing the same places and
+data as before.
+
+### Faster to open
+- The world outline now loads light by default and sharpens as you zoom in, so the first view paints
+  sooner. Coastlines, borders, and the river network fill in more detail the closer you look.
+- The base map is served from the app's own storage rather than a third-party CDN, so it loads
+  alongside the rest of the data.
+- The gallery no longer loads the map engine until you open a map, so the front page is lighter.
+
+### Smoother when zoomed
+- Features outside the view are skipped, so panning and spinning the globe stay responsive with dense
+  layers such as rivers, shipping lanes and earthquakes turned on.
+
+## [0.1.2] - 2026-07-28
 
 A breadth pass on the same platform: new overlays across hazards, reference geography, and
 society, plus scalar surfaces (elevation, sea-surface temperature) and a month control that

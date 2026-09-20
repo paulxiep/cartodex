@@ -82,4 +82,7 @@ export const regionRenderer: PrimitiveRenderer = {
       .on('pointerleave', hideTooltip)
     if (transform) sel.attr('transform', (f) => transform(f))
   },
+  // The cartogram scales a region up to AREA_CLAMP times around its centroid, far past its own
+  // bounds, so a layer with an area binding is drawn without culling.
+  cullPadding: (layer) => (layer.area ? null : (layer.style.strokeWidth ?? 0.4)),
 }

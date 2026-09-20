@@ -1,6 +1,7 @@
-// Shared helper: wrap a fitted d3 GeoProjection as the engine's Projector. `project`
-// returns null for clipped points (e.g. the far side of an orthographic globe), which
-// the layer renderers use to drop back-hemisphere geometry.
+// Shared helper: wrap a fitted d3 GeoProjection as the engine's Projector. `project` returns the
+// projected point, or null only when d3 yields none. Note d3 does NOT return null for a globe's
+// far-side points - both hemispheres fold onto the disc - so point-like renderers hide back-
+// hemisphere marks with an explicit horizon test (lib/cull farSideTest); geoPath clips paths itself.
 
 import { geoPath } from 'd3-geo'
 import type { GeoProjection } from 'd3-geo'

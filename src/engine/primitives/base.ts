@@ -18,4 +18,5 @@ export const baseRenderer: PrimitiveRenderer = {
       .attr('stroke-width', s.strokeWidth ?? 0.5)
       .attr('opacity', s.opacity ?? 1)
   },
+  cullPadding: (layer) => layer.style.strokeWidth ?? 0.5,
 }
